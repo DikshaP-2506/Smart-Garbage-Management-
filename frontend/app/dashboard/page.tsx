@@ -3,6 +3,7 @@
 import { useState, useRef } from "react"
 import axios from "axios"
 import exifr from "exifr"
+import DashboardLayout from '@/components/dashboard-layout'
 
 export default function Dashboard() {
 
@@ -196,7 +197,8 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 flex justify-center items-center p-6">
+    <DashboardLayout userType="citizen" userName="Dashboard User">
+      <div className="min-h-full bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 flex justify-center items-center p-6">
 
       <div className="bg-white shadow-xl rounded-2xl p-8 w-full max-w-2xl">
 
@@ -400,6 +402,7 @@ export default function Dashboard() {
         })()}
 
       </div>
-    </div>
+      </div>
+    </DashboardLayout>
   )
 }

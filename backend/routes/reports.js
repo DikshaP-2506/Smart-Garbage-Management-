@@ -286,6 +286,14 @@ router.post('/submit', upload.any(), async (req, res) => {
         waste_type: visionResult?.waste_type || null,
         severity: visionResult?.severity || null,
         weather_metadata: weatherMetadata
+      },
+      // Points and Rewards System
+      points: {
+        base_points: 50,
+        bonus_points: calculateBonusPoints(priority, visionResult?.confidence_score, ticket.ticket_count === 1),
+        total_points: 50 + calculateBonusPoints(priority, visionResult?.confidence_score, ticket.ticket_count === 1),
+        achievement_unlocked: null,
+        social_milestone_reached: false
       }
     });
 
@@ -365,7 +373,17 @@ router.get('/my-reports', async (req, res) => {
       latitude: ticket.latitude,
       longitude: ticket.longitude,
       created_at: ticket.created_at,
-      updated_at: ticket.created_at
+      updated_at: ticket.created_at,
+      // AI Analysis Data
+      waste_type: ticket.waste_type,
+      drain_blocked: ticket.drain_blocked,
+      rain_probability: ticket.rain_probability,
+      weather_metadata: ticket.weather_metadata,
+      severity: ticket.severity || 'medium',
+      translated_description: ticket.translated_description,
+      is_flagged: ticket.is_flagged,
+      ticket_count: ticket.ticket_count || 1,
+      voice_transcript: ticket.voice_transcript
     }));
 
     res.json({
@@ -383,5 +401,300 @@ router.get('/my-reports', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch reports' });
   }
 });
+
+// 📈 GET ANALYTICS DATA
+router.get('/analytics', async (req, res) => {
+  try {
+    const timeRange = parseInt(req.query.days) || 30;
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(endDate.getDate() - timeRange);
+
+    // Fetch all tickets in the time range
+    const { data: tickets, error: ticketsError } = await supabase
+      .from('tickets')
+      .select('*')
+      .gte('created_at', startDate.toISOString())
+      .lte('created_at', endDate.toISOString())
+      .order('created_at', { ascending: false });
+
+    if (ticketsError) {
+      throw ticketsError;
+    }
+
+    // Calculate analytics
+    const analytics = {
+      summary: {
+        total_reports: tickets.length,
+        pending: tickets.filter(t => t.status === 'PENDING').length,
+        in_progress: tickets.filter(t => t.status === 'IN_PROGRESS').length,
+        resolved: tickets.filter(t => t.status === 'RESOLVED').length,
+        rejected: tickets.filter(t => t.status === 'REJECTED').length,
+        avg_confidence: tickets.length > 0 ? 
+          tickets.reduce((acc, t) => acc + (t.confidence_score || 0), 0) / tickets.length : 0,
+        flagged_reports: tickets.filter(t => t.is_flagged).length,
+        duplicate_reports: tickets.filter(t => (t.ticket_count || 1) > 1).length
+      },
+      
+      trends: {
+        daily: generateDailyTrends(tickets, timeRange),
+        weekly: generateWeeklyTrends(tickets),
+        monthly: generateMonthlyTrends(tickets)
+      },
+      
+      distributions: {
+        by_status: generateStatusDistribution(tickets),
+        by_priority: generatePriorityDistribution(tickets),
+        by_waste_type: generateWasteTypeDistribution(tickets),
+        by_severity: generateSeverityDistribution(tickets)
+      },
+      
+      performance: {
+        resolution_rate: tickets.length > 0 ? 
+          (tickets.filter(t => t.status === 'RESOLVED').length / tickets.length) * 100 : 0,
+        avg_resolution_time: calculateAvgResolutionTime(tickets),
+        response_efficiency: calculateResponseEfficiency(tickets),
+        ai_accuracy: tickets.length > 0 ? 
+          tickets.reduce((acc, t) => acc + (t.confidence_score || 0), 0) / tickets.length : 0
+      },
+      
+      geography: {
+        hotspots: generateGeographicHotspots(tickets),
+        coverage_areas: calculateCoverageAreas(tickets)
+      }
+    };
+
+    res.json(analytics);
+
+  } catch (error) {
+    console.error('Analytics error:', error);
+    res.status(500).json({ error: 'Failed to fetch analytics', details: error.message });
+  }
+});
+
+// Helper functions for analytics
+function generateDailyTrends(tickets, days) {
+  const trends = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const date = new Date();
+    date.setDate(date.getDate() - i);
+    const dayString = date.toISOString().split('T')[0];
+    
+    const dayTickets = tickets.filter(ticket => 
+      ticket.created_at.split('T')[0] === dayString
+    );
+    
+    trends.push({
+      date: dayString,
+      total: dayTickets.length,
+      resolved: dayTickets.filter(t => t.status === 'RESOLVED').length,
+      pending: dayTickets.filter(t => t.status === 'PENDING').length,
+      in_progress: dayTickets.filter(t => t.status === 'IN_PROGRESS').length
+    });
+  }
+  return trends;
+}
+
+function generateWeeklyTrends(tickets) {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  return days.map((day, index) => ({
+    day,
+    count: tickets.filter(ticket => 
+      new Date(ticket.created_at).getDay() === index
+    ).length
+  }));
+}
+
+function generateMonthlyTrends(tickets) {
+  const monthlyData = {};
+  tickets.forEach(ticket => {
+    const month = new Date(ticket.created_at).toISOString().slice(0, 7); // YYYY-MM
+    monthlyData[month] = (monthlyData[month] || 0) + 1;
+  });
+  
+  return Object.entries(monthlyData).map(([month, count]) => ({
+    month,
+    count
+  }));
+}
+
+function generateStatusDistribution(tickets) {
+  const distribution = {};
+  tickets.forEach(ticket => {
+    distribution[ticket.status] = (distribution[ticket.status] || 0) + 1;
+  });
+  
+  return Object.entries(distribution).map(([status, count]) => ({
+    status,
+    count,
+    percentage: (count / tickets.length) * 100
+  }));
+}
+
+function generatePriorityDistribution(tickets) {
+  const distribution = {};
+  tickets.forEach(ticket => {
+    const priority = ticket.priority || 'NORMAL';
+    distribution[priority] = (distribution[priority] || 0) + 1;
+  });
+  
+  return Object.entries(distribution).map(([priority, count]) => ({
+    priority,
+    count,
+    percentage: (count / tickets.length) * 100
+  }));
+}
+
+function generateWasteTypeDistribution(tickets) {
+  const distribution = {};
+  tickets.forEach(ticket => {
+    const wasteType = ticket.waste_type || 'unknown';
+    distribution[wasteType] = (distribution[wasteType] || 0) + 1;
+  });
+  
+  return Object.entries(distribution).map(([waste_type, count]) => ({
+    waste_type,
+    count,
+    percentage: (count / tickets.length) * 100
+  }));
+}
+
+function generateSeverityDistribution(tickets) {
+  const distribution = {};
+  tickets.forEach(ticket => {
+    // Extract severity from metadata if available
+    const severity = ticket.severity || 'medium';
+    distribution[severity] = (distribution[severity] || 0) + 1;
+  });
+  
+  return Object.entries(distribution).map(([severity, count]) => ({
+    severity,
+    count,
+    percentage: (count / tickets.length) * 100
+  }));
+}
+
+function calculateAvgResolutionTime(tickets) {
+  const resolvedTickets = tickets.filter(t => t.status === 'RESOLVED' && t.resolved_at);
+  
+  if (resolvedTickets.length === 0) return 0;
+  
+  const totalTime = resolvedTickets.reduce((sum, ticket) => {
+    const created = new Date(ticket.created_at);
+    const resolved = new Date(ticket.resolved_at);
+    return sum + (resolved.getTime() - created.getTime());
+  }, 0);
+  
+  return totalTime / resolvedTickets.length / (1000 * 60 * 60); // Convert to hours
+}
+
+function calculateResponseEfficiency(tickets) {
+  const responded = tickets.filter(t => t.status !== 'PENDING').length;
+  return tickets.length > 0 ? (responded / tickets.length) * 100 : 0;
+}
+
+function generateGeographicHotspots(tickets) {
+  const hotspots = {};
+  
+  tickets.forEach(ticket => {
+    if (ticket.latitude && ticket.longitude) {
+      // Group by approximate location (rounded to 3 decimal places)
+      const lat = Math.round(ticket.latitude * 1000) / 1000;
+      const lng = Math.round(ticket.longitude * 1000) / 1000;
+      const key = `${lat},${lng}`;
+      
+      if (!hotspots[key]) {
+        hotspots[key] = {
+          latitude: lat,
+          longitude: lng,
+          count: 0,
+          tickets: []
+        };
+      }
+      
+      hotspots[key].count++;
+      hotspots[key].tickets.push(ticket.id);
+    }
+  });
+  
+  return Object.values(hotspots)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10); // Top 10 hotspots
+}
+
+function calculateCoverageAreas(tickets) {
+  const validTickets = tickets.filter(t => t.latitude && t.longitude);
+  
+  if (validTickets.length === 0) {
+    return { zones: 0, avg_density: 0 };
+  }
+  
+  // Simple zone calculation based on geographic spread
+  const lats = validTickets.map(t => t.latitude);
+  const lngs = validTickets.map(t => t.longitude);
+  
+  const latRange = Math.max(...lats) - Math.min(...lats);
+  const lngRange = Math.max(...lngs) - Math.min(...lngs);
+  
+  // Estimate zones based on geographic spread
+  const estimatedZones = Math.ceil((latRange * lngRange) * 10000); // Rough calculation
+  
+  return {
+    zones: Math.min(estimatedZones, 50), // Cap at 50 zones
+    avg_density: validTickets.length / Math.max(estimatedZones, 1),
+    geographic_spread: {
+      lat_range: latRange,
+      lng_range: lngRange
+    }
+  };
+}
+
+// Points and reward calculation functions
+function calculateBonusPoints(priority, confidenceScore, isNewLocation) {
+  let bonusPoints = 0;
+  
+  // Priority bonuses
+  switch(priority) {
+    case 'URGENT': bonusPoints += 30; break;
+    case 'HIGH': bonusPoints += 20; break;
+    case 'NORMAL': bonusPoints += 10; break;
+    case 'LOW': bonusPoints += 5; break;
+  }
+  
+  // Confidence score bonus (higher confidence = more points)
+  if (confidenceScore) {
+    if (confidenceScore >= 90) bonusPoints += 25;
+    else if (confidenceScore >= 80) bonusPoints += 20;
+    else if (confidenceScore >= 70) bonusPoints += 15;
+    else if (confidenceScore >= 60) bonusPoints += 10;
+  }
+  
+  // New location discovery bonus
+  if (isNewLocation) {
+    bonusPoints += 15;
+  }
+  
+  return bonusPoints;
+}
+
+function checkAchievementUnlock(totalPoints, reportCount) {
+  const achievements = [
+    { id: 'first_reporter', threshold: 50, reports: 1, title: 'First Reporter' },
+    { id: 'active_citizen', threshold: 200, reports: 5, title: 'Active Citizen' },
+    { id: 'eco_warrior', threshold: 500, reports: 10, title: 'Eco Warrior' },
+    { id: 'community_hero', threshold: 1000, reports: 20, title: 'Community Hero' },
+    { id: 'environmental_champion', threshold: 2500, reports: 50, title: 'Environmental Champion' },
+    { id: 'eco_ambassador', threshold: 5000, reports: 100, title: 'Eco Ambassador' }
+  ];
+  
+  return achievements.find(achievement => 
+    totalPoints >= achievement.threshold && reportCount >= achievement.reports
+  );
+}
+
+function checkSocialMilestone(totalPoints) {
+  const milestones = [3000, 5000, 10000];
+  return milestones.includes(totalPoints);
+}
 
 export default router;
