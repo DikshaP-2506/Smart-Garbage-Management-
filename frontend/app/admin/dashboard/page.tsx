@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Fragment } from 'react';
 import dynamic from 'next/dynamic';
-import { Shield, Filter, MapPin, Users, Clock, CheckCircle, AlertTriangle, Plus, Play, Trash2 } from 'lucide-react';
+import { Shield, Filter, MapPin, Users, Clock, CheckCircle, AlertTriangle, Plus, Play, Trash2, Sparkles, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -53,6 +53,8 @@ export default function AdminDashboard() {
   const [isCreateJobOpen, setIsCreateJobOpen] = useState(false);
   const [newJobTitle, setNewJobTitle] = useState('');
   const [loading, setLoading] = useState(true);
+  const [verifyingTicket, setVerifyingTicket] = useState<string | null>(null);
+  const [verifyResults, setVerifyResults] = useState<Record<string, { verdict: string; confidence_pct: number; reasoning: string; is_clean: boolean; landmarks_match: boolean; drain_clear: boolean }>>({});
   
   const { toast } = useToast();
 
@@ -357,12 +359,37 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleVerifyTicket = async (ticketId: string) => {
+    setVerifyingTicket(ticketId);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const r = await fetch(`${apiBase}/verify/${ticketId}`, { method: 'POST' });
+      const text = await r.text();
+      let d: any = {};
+      try { d = JSON.parse(text); } catch { throw new Error(`Server error (${r.status})`); }
+      if (!r.ok) throw new Error(d.error || 'Verification failed');
+      setVerifyResults(prev => ({ ...prev, [ticketId]: d }));
+      toast({
+        title: d.verdict === 'CLOSED' ? '✅ Ticket CLOSED' : '⚠️ Ticket REJECTED',
+        description: `Confidence: ${d.confidence_pct}% — ${d.reasoning}`,
+        variant: d.verdict === 'CLOSED' ? 'default' : 'destructive',
+      });
+      loadTickets();
+    } catch (e) {
+      toast({ title: 'Verification Error', description: (e as Error).message, variant: 'destructive' });
+    } finally {
+      setVerifyingTicket(null);
+    }
+  };
+
   const getStatusBadgeVariant = (status: TicketStatus) => {
     switch (status) {
       case 'NEW': return 'destructive';
       case 'OPEN': return 'default';
       case 'IN_PROGRESS': return 'secondary';
       case 'COMPLETED': return 'outline';
+      case 'CLOSED' as any: return 'outline';
+      case 'REJECTED' as any: return 'destructive';
       default: return 'default';
     }
   };
@@ -507,6 +534,8 @@ export default function AdminDashboard() {
                       <SelectItem value="OPEN">Open</SelectItem>
                       <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
                       <SelectItem value="COMPLETED">Completed</SelectItem>
+                      <SelectItem value="CLOSED">Closed ✅</SelectItem>
+                      <SelectItem value="REJECTED">Rejected ⚠️</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -741,9 +770,10 @@ export default function AdminDashboard() {
                       const wasteType = (ticket as any).waste_type;
                       const severity = (ticket as any).severity;
                       const isSelected = selectedTickets.includes(ticket.id);
-                      return (
+                        const vr = verifyResults[ticket.id];
+                        return (
+                        <Fragment key={ticket.id}>
                         <tr
-                          key={ticket.id}
                           className={`transition-colors hover:bg-gray-50 cursor-pointer ${isSelected ? 'bg-blue-50 hover:bg-blue-100' : ''} ${priority === 'CRITICAL' ? 'border-l-4 border-l-red-600' : priority === 'HIGH' ? 'border-l-4 border-l-orange-500' : priority === 'MEDIUM' ? 'border-l-4 border-l-yellow-400' : ''}`}
                           onClick={() => handleTicketSelect(ticket.id, !isSelected)}
                         >
@@ -769,20 +799,122 @@ export default function AdminDashboard() {
                             </span>
                           </td>
                           <td className="px-4 py-3">
-                            <Badge variant={getStatusBadgeVariant(ticket.status)} className="text-xs">{ticket.status.replace('_', ' ')}</Badge>
+                            <Badge
+                              variant={getStatusBadgeVariant(ticket.status)}
+                              className={`text-xs w-fit ${
+                                (ticket.status as string) === 'CLOSED' ? 'bg-green-100 text-green-800 border-green-300' :
+                                (ticket.status as string) === 'REJECTED' ? 'bg-red-100 text-red-800 border-red-300' : ''
+                              }`}>
+                              {ticket.status.replace('_', ' ')}
+                            </Badge>
                           </td>
                           <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{format(new Date(ticket.created_at), 'MMM d, HH:mm')}</td>
                           <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
-                            <div className="flex items-center justify-center gap-1">
+                            <div className="flex items-center justify-center gap-1 flex-wrap">
                               <Button variant={isSelected ? 'secondary' : 'outline'} size="sm" className="h-6 text-[10px] px-2" onClick={() => handleTicketSelect(ticket.id, !isSelected)}>
                                 {isSelected ? '✓ Sel' : 'Select'}
                               </Button>
+                              {(ticket.status as string) === 'COMPLETED' && (
+                                <Button
+                                  size="sm"
+                                  className="h-6 text-[10px] px-2 bg-purple-600 hover:bg-purple-700 text-white"
+                                  disabled={verifyingTicket === ticket.id}
+                                  onClick={() => handleVerifyTicket(ticket.id)}>
+                                  {verifyingTicket === ticket.id
+                                    ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Verifying…</>
+                                    : <><Sparkles className="h-3 w-3 mr-1" />AI Verify</>}
+                                </Button>
+                              )}
+                              {(ticket.status as string) === 'REJECTED' && (
+                                <Button
+                                  size="sm"
+                                  className="h-6 text-[10px] px-2 bg-orange-500 hover:bg-orange-600 text-white"
+                                  disabled={verifyingTicket === ticket.id}
+                                  onClick={() => handleVerifyTicket(ticket.id)}>
+                                  {verifyingTicket === ticket.id
+                                    ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Verifying…</>
+                                    : <>↺ Re-Verify</>}
+                                </Button>
+                              )}
                               <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => deleteTicket(ticket.id)}>
                                 <Trash2 className="h-3 w-3" />
                               </Button>
                             </div>
                           </td>
                         </tr>
+                        {/* AI Verification result expansion row */}
+                        {vr && (
+                          <tr className={vr.verdict === 'CLOSED' ? 'bg-green-50' : 'bg-red-50'}>
+                            <td colSpan={11} className="px-6 pb-4 pt-0" onClick={e => e.stopPropagation()}>
+                              <div className={`rounded-xl border p-4 shadow-sm ${
+                                vr.verdict === 'CLOSED'
+                                  ? 'border-green-200 bg-white'
+                                  : 'border-red-200 bg-white'
+                              }`}>
+                                {/* Header */}
+                                <div className="flex items-center justify-between mb-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-lg font-extrabold tracking-wide ${
+                                      vr.verdict === 'CLOSED' ? 'text-green-700' : 'text-red-700'
+                                    }`}>
+                                      {vr.verdict === 'CLOSED' ? '✅ CLOSED' : '❌ REJECTED'}
+                                    </span>
+                                    <span className="text-xs text-gray-400">— AI Verification Report</span>
+                                  </div>
+                                  <button
+                                    className="text-gray-400 hover:text-gray-600 text-xs underline"
+                                    onClick={() => setVerifyResults(prev => { const n = {...prev}; delete n[ticket.id]; return n; })}>
+                                    Dismiss
+                                  </button>
+                                </div>
+                                {/* Confidence bar */}
+                                <div className="mb-3">
+                                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                    <span>AI Confidence</span>
+                                    <span className="font-bold">{vr.confidence_pct}%</span>
+                                  </div>
+                                  <div className="w-full bg-gray-200 rounded-full h-2">
+                                    <div
+                                      className={`h-2 rounded-full transition-all ${
+                                        vr.verdict === 'CLOSED' ? 'bg-green-500' : vr.confidence_pct >= 50 ? 'bg-yellow-500' : 'bg-red-500'
+                                      }`}
+                                      style={{ width: `${vr.confidence_pct}%` }}
+                                    />
+                                  </div>
+                                </div>
+                                {/* Checks */}
+                                <div className="grid grid-cols-3 gap-3 mb-3">
+                                  <div className={`rounded-lg border px-3 py-2 text-center ${
+                                    vr.is_clean ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
+                                  }`}>
+                                    <div className="text-xl">{vr.is_clean ? '🗑️✅' : '🗑️❌'}</div>
+                                    <div className="text-[11px] font-semibold mt-1">{vr.is_clean ? 'Garbage Cleared' : 'Garbage Remains'}</div>
+                                  </div>
+                                  <div className={`rounded-lg border px-3 py-2 text-center ${
+                                    vr.landmarks_match ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
+                                  }`}>
+                                    <div className="text-xl">{vr.landmarks_match ? '📍✅' : '📍❌'}</div>
+                                    <div className="text-[11px] font-semibold mt-1">{vr.landmarks_match ? 'Same Location' : 'Location Mismatch'}</div>
+                                  </div>
+                                  <div className={`rounded-lg border px-3 py-2 text-center ${
+                                    vr.drain_clear ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'
+                                  }`}>
+                                    <div className="text-xl">{vr.drain_clear ? '🚰✅' : '🚰❌'}</div>
+                                    <div className="text-[11px] font-semibold mt-1">{vr.drain_clear ? 'Drain Clear' : 'Drain Blocked'}</div>
+                                  </div>
+                                </div>
+                                {/* Reasoning */}
+                                <div className={`rounded-lg px-3 py-2 text-xs italic text-gray-700 ${
+                                  vr.verdict === 'CLOSED' ? 'bg-green-50' : 'bg-red-50'
+                                }`}>
+                                  <span className="font-semibold not-italic text-gray-500">AI reasoning: </span>
+                                  {vr.reasoning}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        </Fragment>
                       );
                     })
                   )}

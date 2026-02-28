@@ -4,6 +4,8 @@ import dotenv from 'dotenv'
 import processorRoute from './routes/processor.js'
 import authRoute from './routes/auth.js'
 import reportsRoute from './routes/reports.js'
+import jobsRoute from './routes/jobs.js'
+import verifyRoute from './routes/verify.js'
 
 dotenv.config()
 
@@ -16,6 +18,12 @@ app.use('/api/auth', authRoute)
 
 // Reports routes (Mandatory Reporting Engine)
 app.use('/api/reports', reportsRoute)
+
+// Jobs API — worker accept/complete flow
+app.use('/api/jobs', jobsRoute)
+
+// Module 7: AI Verification Auditor
+app.use('/api/verify', verifyRoute)
 
 // Other routes
 app.use('/api/process', processorRoute)
