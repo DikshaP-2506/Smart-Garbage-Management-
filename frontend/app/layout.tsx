@@ -9,9 +9,10 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Profile App',
-  description: 'A minimal app with a profile page',
-  generator: 'v0.app',
+  title: 'SmartWaste AI - Intelligent Garbage Management System',
+  description: 'Revolutionary AI-powered waste management system helping cities become cleaner, smarter, and more sustainable.',
+  generator: 'NextJS',
+  keywords: 'waste management, smart city, AI, garbage collection, sustainability, environment',
   icons: {
     icon: [
       {
@@ -39,7 +40,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`font-sans antialiased`} suppressHydrationWarning>
-        <ThemeProvider attribute="class" defaultTheme="dark" forcedTheme="dark">
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={true}>
           {children}
           <Analytics />
         </ThemeProvider>

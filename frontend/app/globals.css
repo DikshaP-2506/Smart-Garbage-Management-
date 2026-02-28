@@ -5,76 +5,76 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* FloodGuard AI Color Scheme */
+  /* SmartWaste AI Custom Color Scheme */
   --background: #ffffff;
-  --foreground: #1f2937;
+  --foreground: #320e2f;
   --card: #ffffff;
-  --card-foreground: #1f2937;
+  --card-foreground: #320e2f;
   --popover: #ffffff;
-  --popover-foreground: #1f2937;
-  --primary: #1e3a8a; /* Deep Blue */
+  --popover-foreground: #320e2f;
+  --primary: #5770fe; /* Primary Blue */
   --primary-foreground: #ffffff;
-  --secondary: #f1f5f9;
-  --secondary-foreground: #1e3a8a;
+  --secondary: #f8fafc;
+  --secondary-foreground: #5770fe;
   --muted: #f8fafc;
   --muted-foreground: #6b7280;
-  --accent: #0d9488; /* Teal */
+  --accent: #5770fe; /* Accent Blue */
   --accent-foreground: #ffffff;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
   --border: #e5e7eb;
   --input: #ffffff;
-  --ring: #1e3a8a;
-  --chart-1: #1e3a8a;
-  --chart-2: #0d9488;
+  --ring: #5770fe;
+  --chart-1: #5770fe;
+  --chart-2: #320e2f;
   --chart-3: #f59e0b;
   --chart-4: #10b981;
   --chart-5: #dc2626;
   --radius: 0.75rem;
   --sidebar: #ffffff;
-  --sidebar-foreground: #1f2937;
-  --sidebar-primary: #1e3a8a;
+  --sidebar-foreground: #320e2f;
+  --sidebar-primary: #5770fe;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #f8fafc;
-  --sidebar-accent-foreground: #1f2937;
+  --sidebar-accent-foreground: #320e2f;
   --sidebar-border: #e5e7eb;
-  --sidebar-ring: #1e3a8a;
+  --sidebar-ring: #5770fe;
 }
 
 .dark {
-  /* Dark mode for FloodGuard AI (optional) */
-  --background: #0f172a;
+  /* Dark mode for SmartWaste AI */
+  --background: #320e2f;
   --foreground: #f8fafc;
   --card: #1e293b;
   --card-foreground: #f8fafc;
   --popover: #1e293b;
   --popover-foreground: #f8fafc;
-  --primary: #3b82f6;
+  --primary: #5770fe;
   --primary-foreground: #ffffff;
   --secondary: #334155;
   --secondary-foreground: #f8fafc;
   --muted: #1e293b;
   --muted-foreground: #94a3b8;
-  --accent: #14b8a6;
+  --accent: #5770fe;
   --accent-foreground: #ffffff;
   --destructive: #dc2626;
   --destructive-foreground: #ffffff;
   --border: #334155;
   --input: #1e293b;
-  --ring: #3b82f6;
-  --chart-1: #3b82f6;
-  --chart-2: #14b8a6;
+  --ring: #5770fe;
+  --chart-1: #5770fe;
+  --chart-2: #320e2f;
   --chart-3: #f59e0b;
   --chart-4: #10b981;
   --chart-5: #dc2626;
-  --sidebar: #0f172a;
+  --sidebar: #320e2f;
   --sidebar-foreground: #f8fafc;
-  --sidebar-primary: #3b82f6;
+  --sidebar-primary: #5770fe;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #334155;
   --sidebar-accent-foreground: #f8fafc;
   --sidebar-border: #334155;
-  --sidebar-ring: #3b82f6;
+  --sidebar-ring: #5770fe;
 }
 
 @theme inline {

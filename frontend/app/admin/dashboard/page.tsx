@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { useToast } from '@/hooks/use-toast';
 import { supabase, type Database } from '@/lib/supabase';
 import { format } from 'date-fns';
+import DashboardLayout from '@/components/dashboard-layout';
 
 // Use actual database types from Supabase
 type Ticket = Database['public']['Tables']['tickets']['Row'];
@@ -420,25 +421,8 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="bg-blue-900 p-2 rounded-full">
-              <Shield className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Admin Command Center</h1>
-              <p className="text-gray-600">Admin Dashboard • Civic Issue Management</p>
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="text-lg font-semibold text-gray-900">Admin User</p>
-            <p className="text-sm text-gray-600">Administrator</p>
-          </div>
-        </div>
-      </div>
+    <DashboardLayout userType="admin" userName="Admin User">
+      <div className="bg-gray-50 min-h-full">
 
       {/* Stats Row */}
       <div className="p-4 bg-white border-b border-gray-200">
@@ -792,6 +776,7 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
       </div>
-    </div>
+      </div>
+    </DashboardLayout>
   );
 }
