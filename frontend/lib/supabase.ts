@@ -120,9 +120,134 @@ export type Database = {
           updated_at?: string
         }
       }
+      tickets: {
+        Row: {
+          id: string
+          ward_id: number
+          latitude: number
+          longitude: number
+          status: 'NEW' | 'OPEN' | 'IN_PROGRESS' | 'COMPLETED'
+          confidence_score: number
+          title: string
+          description: string
+          category: string
+          citizen_id: number
+          image_url?: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          ward_id: number
+          latitude: number
+          longitude: number
+          status?: 'NEW' | 'OPEN' | 'IN_PROGRESS' | 'COMPLETED'
+          confidence_score: number
+          title: string
+          description: string
+          category: string
+          citizen_id: number
+          image_url?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          ward_id?: number
+          latitude?: number
+          longitude?: number
+          status?: 'NEW' | 'OPEN' | 'IN_PROGRESS' | 'COMPLETED'
+          confidence_score?: number
+          title?: string
+          description?: string
+          category?: string
+          citizen_id?: number
+          image_url?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      jobs: {
+        Row: {
+          id: string
+          assigned_by: string | null
+          assigned_ward: number | null
+          job_status: 'OPEN' | 'IN_PROGRESS' | 'COMPLETED'
+          title: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          assigned_by?: string | null
+          assigned_ward?: number | null
+          job_status?: 'OPEN' | 'IN_PROGRESS' | 'COMPLETED'
+          title?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          assigned_by?: string | null
+          assigned_ward?: number | null
+          job_status?: 'OPEN' | 'IN_PROGRESS' | 'COMPLETED'
+          title?: string | null
+          created_at?: string
+        }
+      }
+      job_tickets: {
+        Row: {
+          id: string
+          job_id: string
+          ticket_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          job_id: string
+          ticket_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          job_id?: string
+          ticket_id?: string
+          created_at?: string
+        }
+      }
+      wards: {
+        Row: {
+          id: number
+          name: string
+          area_polygon: any
+          population: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: number
+          name: string
+          area_polygon: any
+          population?: number | null
+          created_at?: string
+        }
+        Update: {
+          id?: number
+          name?: string
+          area_polygon?: any
+          population?: number | null
+          created_at?: string
+        }
+      }
     }
   }
 }
 
 export type UserRole = 'CITIZEN' | 'WORKER' | 'ADMIN'
 export type AuthProvider = 'EMAIL' | 'GOOGLE'
+export type TicketStatus = 'NEW' | 'OPEN' | 'IN_PROGRESS' | 'COMPLETED'
+export type JobStatus = 'OPEN' | 'IN_PROGRESS' | 'COMPLETED'
+
+// Type aliases for easier use
+export type Ticket = Database['public']['Tables']['tickets']['Row']
+export type Job = Database['public']['Tables']['jobs']['Row']
+export type JobTicket = Database['public']['Tables']['job_tickets']['Row']
+export type Ward = Database['public']['Tables']['wards']['Row']
+export type Profile = Database['public']['Tables']['profiles']['Row']

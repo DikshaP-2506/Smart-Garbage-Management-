@@ -49,28 +49,3 @@ export default function AuthCallback() {
     </div>
   )
 }
-
-    // Small delay to ensure searchParams are ready
-    setTimeout(handleAuthCallback, 100);
-  }, [searchParams]);
-
-  return (
-    <div className="min-h-screen bg-white flex items-center justify-center px-4">
-      <div className="text-center">
-        <div className="flex justify-center mb-4">
-          <div className="bg-blue-900 p-3 rounded-full">
-            <Shield className="h-8 w-8 text-white" />
-          </div>
-        </div>
-        <h1 className="text-xl font-semibold text-gray-900 mb-2">Completing Authentication</h1>
-        <div className="flex items-center justify-center space-x-2 text-gray-600">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span>Processing your Google login...</span>
-        </div>
-        <p className="text-sm text-gray-500 mt-4">
-          This window will close automatically when complete.
-        </p>
-      </div>
-    </div>
-  );
-}

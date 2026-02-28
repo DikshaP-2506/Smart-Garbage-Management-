@@ -1,3 +1,4 @@
+@import 'leaflet/dist/leaflet.css';
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
@@ -181,4 +182,32 @@
   ::-webkit-scrollbar-thumb:hover {
     background: #94a3b8;
   }
+}
+
+/* Leaflet Map Custom Styles */
+.custom-marker {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* Fix for leaflet marker icons */
+.leaflet-marker-icon {
+  margin-left: -10px !important;
+  margin-top: -10px !important;
+}
+
+/* Ensure map popups are above other elements */
+.leaflet-popup-pane {
+  z-index: 1000;
+}
+
+/* Custom popup styling */
+.leaflet-popup-content-wrapper {
+  padding: 0;
+  border-radius: 8px;
+}
+
+.leaflet-popup-content {
+  margin: 0;
+  padding: 0;
 }
