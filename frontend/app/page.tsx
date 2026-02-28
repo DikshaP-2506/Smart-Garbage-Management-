@@ -1,119 +1,219 @@
-import { Recycle, Leaf, MapPin, Brain, Users, Shield, Zap, BarChart3 } from 'lucide-react';
+'use client';
+
+import Link from 'next/link';
+import { ArrowRight, Shield, Users, Recycle, BarChart3, MapPin, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import EnhancedNavbar from '@/components/enhanced-navbar';
 import Footer from '@/components/footer';
-import Link from 'next/link';
 
-export default function Home() {
+export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50">
+    <div className="min-h-screen flex flex-col bg-white">
       <EnhancedNavbar />
       
-      {/* Hero Section */}
-      <section className="relative overflow-hidden py-20 lg:py-28">
-        <div className="absolute inset-0 bg-gradient-to-r from-green-600/10 to-emerald-600/10"></div>
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center">
-            <img
-              src="/logo.png"
-              alt="SmartWaste - Intelligent Garbage Management"
-              className="h-20 w-auto rounded-2xl shadow-2xl object-contain mb-6"
-            />
-            
-            
-            <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold text-gray-900 leading-tight">
-              <span className="bg-gradient-to-r from-[#5770fe] to-[#320e2f] bg-clip-text text-transparent">
-                Powered by AI
-              </span>
-            </h1>
-            
-            <p className="mt-6 text-xl md:text-2xl text-gray-600 max-w-3xl mx-auto leading-relaxed">
-              Transform your city with intelligent garbage management. Real-time monitoring, 
-              optimized routes, and citizen engagement for a cleaner, greener tomorrow.
-            </p>
-            
-            <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center items-center">
-              <Link href="/login">
-                <Button size="lg" className="px-8 py-4 bg-gradient-to-r from-[#5770fe] to-[#320e2f] text-white text-lg font-semibold shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105">
-                  Get Started Today
+      {/* Hero Section with Background Image */}
+      <section className="relative h-screen flex items-center justify-center overflow-hidden">
+        {/* Background Image with Overlay */}
+        <div 
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+          style={{
+            backgroundImage: 'url(/landing-page.png)',
+          }}
+        >
+          {/* Grey-White Overlay */}
+          <div className="absolute inset-0 bg-gradient-to-r from-white/70 via-gray-100/60 to-gray-200/40"></div>
+        </div>
+        
+        {/* Content */}
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            {/* Left side - Text content */}
+            <div className="text-left space-y-8">
+              <div>
+                <h1 className="text-5xl lg:text-7xl font-bold text-gray-900 leading-tight mb-6">
+                  Smart Waste
+                  <span className="block text-transparent bg-clip-text bg-gradient-to-r from-[#5770fe] to-[#320e2f]">
+                    Management
+                  </span>
+                </h1>
+                <p className="text-xl lg:text-2xl text-gray-700 leading-relaxed max-w-2xl">
+                  Transform your city with AI-powered garbage management. Detect, analyze, and optimize waste collection with real-time intelligence and community engagement.
+                </p>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row gap-4">
+                <Link href="/get-started">
+                  <Button 
+                    size="lg" 
+                    className="bg-gradient-to-r from-[#5770fe] to-[#320e2f] text-white px-8 py-4 text-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
+                  >
+                    Get Started
+                    <ArrowRight className="ml-2 h-5 w-5" />
+                  </Button>
+                </Link>
+                <Button 
+                  size="lg" 
+                  variant="outline" 
+                  className="px-8 py-4 text-lg border-2 border-[#5770fe] text-[#5770fe] hover:bg-[#5770fe] hover:text-white transition-all duration-300"
+                >
+                  Watch Demo
                 </Button>
-              </Link>
-              <Link href="/about">
-                <Button variant="outline" size="lg" className="px-8 py-4 border-[#5770fe] text-[#5770fe] hover:bg-[#5770fe]/5 text-lg font-semibold">
-                  Learn More
-                </Button>
-              </Link>
+              </div>
+
+              {/* Trust indicators */}
+              <div className="flex items-center gap-6 pt-6">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-gray-900">500+</div>
+                  <div className="text-sm text-gray-600">Cities Served</div>
+                </div>
+                <div className="w-px h-12 bg-gray-300"></div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-gray-900">99.9%</div>
+                  <div className="text-sm text-gray-600">Uptime</div>
+                </div>
+                <div className="w-px h-12 bg-gray-300"></div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-gray-900">50M+</div>
+                  <div className="text-sm text-gray-600">Reports Processed</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Features Section */}
-      <section className="py-20 bg-white">
+      <section className="py-20 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-              Revolutionary Waste Management Features
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">
+              Revolutionary Waste Management Platform
             </h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Harness the power of AI to create smarter, cleaner, and more efficient waste management systems.
+              Harness the power of AI, IoT, and community engagement to create cleaner, smarter cities. Our comprehensive platform transforms how waste is managed.
             </p>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[
-              {
-                icon: <Brain className="h-8 w-8" />,
-                title: "AI-Powered Analytics",
-                description: "Advanced machine learning algorithms optimize collection routes and predict waste patterns.",
-                color: "text-purple-600 bg-purple-100"
-              },
-              {
-                icon: <MapPin className="h-8 w-8" />,
-                title: "Smart Route Optimization",
-                description: "Real-time route planning reduces fuel costs and improves collection efficiency by up to 40%.",
-                color: "text-blue-600 bg-blue-100"
-              },
-              {
-                icon: <Users className="h-8 w-8" />,
-                title: "Citizen Engagement",
-                description: "Easy reporting system empowers citizens to contribute to cleaner neighborhoods.",
-                color: "text-green-600 bg-green-100"
-              },
-              {
-                icon: <BarChart3 className="h-8 w-8" />,
-                title: "Real-time Monitoring",
-                description: "Live dashboard tracking of bin levels, collection status, and operational metrics.",
-                color: "text-orange-600 bg-orange-100"
-              },
-              {
-                icon: <Shield className="h-8 w-8" />,
-                title: "Secure Platform",
-                description: "Enterprise-grade security with role-based access for admins, workers, and citizens.",
-                color: "text-red-600 bg-red-100"
-              },
-              {
-                icon: <Leaf className="h-8 w-8" />,
-                title: "Environmental Impact",
-                description: "Track carbon footprint reduction and promote sustainable waste management practices.",
-                color: "text-emerald-600 bg-emerald-100"
-              }
-            ].map((feature, index) => (
-              <Card key={index} className="group hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1">
-                <CardContent className="p-8 text-center">
-                  <div className={`inline-flex p-4 rounded-xl ${feature.color} mb-4`}>
-                    {feature.icon}
-                  </div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-3">
-                    {feature.title}
-                  </h3>
-                  <p className="text-gray-600 leading-relaxed">
-                    {feature.description}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+              <CardHeader>
+                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
+                  <BarChart3 className="h-6 w-6 text-blue-600" />
+                </div>
+                <CardTitle className="text-gray-900">AI-Powered Analytics</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600">
+                  Advanced machine learning algorithms analyze waste patterns, predict collection needs, and optimize routes for maximum efficiency.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+              <CardHeader>
+                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
+                  <MapPin className="h-6 w-6 text-purple-600" />
+                </div>
+                <CardTitle className="text-gray-900">Smart Collection Routes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600">
+                  Dynamic routing optimization reduces fuel costs by up to 40% while ensuring timely waste collection across all service areas.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+              <CardHeader>
+                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
+                  <Users className="h-6 w-6 text-green-600" />
+                </div>
+                <CardTitle className="text-gray-900">Community Engagement</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600">
+                  Enable citizens to report issues, track progress, and earn rewards for environmental contributions. 
+                  Build stronger community participation in city cleanliness initiatives.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+              <CardHeader>
+                <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center mb-4">
+                  <Shield className="h-6 w-6 text-yellow-600" />
+                </div>
+                <CardTitle className="text-gray-900">Real-time Monitoring</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600">
+                  Monitor bin levels, vehicle status, and operational metrics in real-time with our comprehensive dashboard and alert system.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+              <CardHeader>
+                <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center mb-4">
+                  <Clock className="h-6 w-6 text-red-600" />
+                </div>
+                <CardTitle className="text-gray-900">Predictive Maintenance</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600">
+                  Prevent equipment failures and reduce downtime with intelligent predictive maintenance algorithms and proactive scheduling.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300">
+              <CardHeader>
+                <div className="w-12 h-12 bg-indigo-100 rounded-lg flex items-center justify-center mb-4">
+                  <Recycle className="h-6 w-6 text-indigo-600" />
+                </div>
+                <CardTitle className="text-gray-900">Sustainability Metrics</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-600">
+                  Track recycling rates, carbon footprint reduction, and environmental impact with detailed sustainability reporting and insights.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </section>
+
+      {/* Stats Section */}
+      <section className="py-20 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-bold text-gray-900 mb-4">
+              Proven Results Across Cities
+            </h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              Our platform delivers measurable improvements in efficiency, cost reduction, and environmental impact for cities worldwide.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <div className="text-center p-6">
+              <div className="text-4xl font-bold text-[#5770fe] mb-2">40%</div>
+              <div className="text-gray-600">Cost Reduction</div>
+            </div>
+            <div className="text-center p-6">
+              <div className="text-4xl font-bold text-[#320e2f] mb-2">60%</div>
+              <div className="text-gray-600">Route Optimization</div>
+            </div>
+            <div className="text-center p-6">
+              <div className="text-4xl font-bold text-[#5770fe] mb-2">85%</div>
+              <div className="text-gray-600">Citizen Satisfaction</div>
+            </div>
+            <div className="text-center p-6">
+              <div className="text-4xl font-bold text-[#320e2f] mb-2">30%</div>
+              <div className="text-gray-600">Carbon Reduction</div>
+            </div>
           </div>
         </div>
       </section>
@@ -121,30 +221,30 @@ export default function Home() {
       {/* CTA Section */}
       <section className="py-20 bg-gradient-to-r from-[#5770fe] to-[#320e2f]">
         <div className="max-w-4xl mx-auto text-center px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+          <h2 className="text-4xl font-bold text-white mb-6">
             Ready to Transform Your City?
           </h2>
-          <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
-            Join hundreds of cities worldwide that have revolutionized their waste management with SmartWaste AI.
+          <p className="text-xl text-blue-100 mb-8">
+            Join thousands of cities and communities already using our intelligent waste management platform. 
+            Start making your city smarter, cleaner, and more sustainable today.
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Link href="/signup">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link href="/get-started">
               <Button 
                 size="lg" 
-                className="px-8 py-4 bg-white text-[#5770fe] text-lg font-semibold shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105"
+                className="bg-white text-[#5770fe] px-8 py-4 text-lg hover:bg-gray-100 transition-all duration-300 transform hover:-translate-y-1"
               >
-                Start Free Trial
+                Get Started Now
+                <ArrowRight className="ml-2 h-5 w-5" />
               </Button>
             </Link>
-            <Link href="/contact">
-              <Button 
-                variant="outline" 
-                size="lg" 
-                className="px-8 py-4 border-blue-200 text-white hover:bg-[#320e2f] text-lg font-semibold"
-              >
-                Schedule Demo
-              </Button>
-            </Link>
+            <Button 
+              size="lg" 
+              variant="outline" 
+              className="px-8 py-4 text-lg border-2 border-white text-white hover:bg-white hover:text-[#5770fe] transition-all duration-300"
+            >
+              Schedule Demo
+            </Button>
           </div>
         </div>
       </section>

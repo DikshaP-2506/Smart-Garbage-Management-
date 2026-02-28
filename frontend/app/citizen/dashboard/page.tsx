@@ -5,7 +5,7 @@ import {
   Recycle, AlertTriangle, MapPin, Bell, Trash2, Calendar, BarChart, 
   Award, Leaf, TrendingUp, Clock, CheckCircle, Star, Users, 
   Target, Zap, Globe, TreePine, Sparkles, ChevronRight, Share2, Crown, Trophy,
-  Facebook, Linkedin, Twitter, Instagram, Gift
+  Facebook, Linkedin, Twitter, Instagram, Gift, Coins
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -44,19 +44,86 @@ export default function CitizenDashboard() {
   const [selectedPeriod, setSelectedPeriod] = useState('week');
   const [showSocialShare, setShowSocialShare] = useState(false);
   const [newAchievement, setNewAchievement] = useState(null);
+  const [showCoinAnimation, setShowCoinAnimation] = useState(false);
+  const [recentCoinsEarned, setRecentCoinsEarned] = useState(0);
+  const [coinHistory, setCoinHistory] = useState([]);
   
   // Enhanced environmental data with detailed points and achievements
   const environmentalData = {
     co2Saved: 145, // kg this month
     wasteRecycled: 85, // percentage
-    pointsEarned: 2750, // Increased points
+    pointsEarned: 2750, // Total coins/points
+    totalCoins: 2750, // Same as points but emphasizing "coins"
+    coinsThisMonth: 450, // New coins this month
     rankInNeighborhood: 3, // Better rank
     streakDays: 45,
     totalReports: 18,
     socialCredits: 850, // New social recognition score
     nextMilestone: 3000, // Next target for social media feature
     currentBadge: 'Eco Champion',
-    badgeLevel: 4
+    badgeLevel: 4,
+    coinsPerReport: 50, // Base coins per report
+    bonusMultiplier: 1.5 // Current bonus multiplier
+  };
+
+  // Recent coin transactions/earnings
+  const recentEarnings = [
+    {
+      id: 1,
+      action: 'Report Submitted',
+      coins: 75,
+      time: '2 hours ago',
+      type: 'report',
+      bonus: 'High Priority Bonus +25'
+    },
+    {
+      id: 2,
+      action: 'Streak Bonus',
+      coins: 25,
+      time: '1 day ago',
+      type: 'streak',
+      bonus: '45-day streak milestone'
+    },
+    {
+      id: 3,
+      action: 'Report Submitted',
+      coins: 50,
+      time: '3 days ago',
+      type: 'report',
+      bonus: null
+    },
+    {
+      id: 4,
+      action: 'Quality Bonus',
+      coins: 30,
+      time: '5 days ago',
+      type: 'quality',
+      bonus: '95% AI Confidence'
+    }
+  ];
+
+  // Simulate coin earning (this would be called from report submission)
+  const simulateCoinsEarned = (amount) => {
+    setRecentCoinsEarned(amount);
+    setShowCoinAnimation(true);
+    
+    // Add to coin history
+    const newEarning = {
+      id: Date.now(),
+      action: 'Report Submitted',
+      coins: amount,
+      time: 'Just now',
+      type: 'report',
+      bonus: amount > 50 ? `Bonus +${amount - 50}` : null
+    };
+    
+    setCoinHistory(prev => [newEarning, ...prev.slice(0, 4)]);
+    
+    // Hide animation after 3 seconds
+    setTimeout(() => {
+      setShowCoinAnimation(false);
+      setRecentCoinsEarned(0);
+    }, 3000);
   };
 
   // Achievement system
@@ -193,27 +260,36 @@ export default function CitizenDashboard() {
                   </div>
                   
                   <div className="flex items-center space-x-6">
-                    <div className="text-center">
-                      <div className="text-2xl font-bold">{environmentalData.pointsEarned}</div>
-                      <div className="text-green-100 text-sm">Eco Points</div>
+                    <div className="text-center relative">
+                      <div className="flex items-center justify-center gap-2 mb-1">
+                        <span className="text-3xl">🪙</span>
+                        <div className="text-3xl font-bold">{environmentalData.totalCoins.toLocaleString()}</div>
+                        {showCoinAnimation && (
+                          <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 animate-bounce">
+                            <span className="text-green-300 font-bold text-lg">+{recentCoinsEarned}</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-green-100 text-sm">Eco Coins</div>
                       <Progress 
                         value={(environmentalData.pointsEarned / environmentalData.nextMilestone) * 100} 
                         className="mt-1 h-1 bg-white/20" 
                       />
+                      <div className="text-xs text-yellow-200 mt-1">+{environmentalData.coinsThisMonth} this month</div>
                     </div>
-                    <Separator orientation="vertical" className="h-12 bg-white/20" />
+                    <Separator orientation="vertical" className="h-16 bg-white/20" />
                     <div className="text-center">
                       <div className="text-2xl font-bold">#{environmentalData.rankInNeighborhood}</div>
                       <div className="text-blue-100 text-sm">Neighborhood Rank</div>
                       <div className="text-xs text-green-200 mt-1">↗ Top 5%</div>
                     </div>
-                    <Separator orientation="vertical" className="h-12 bg-white/20" />
+                    <Separator orientation="vertical" className="h-16 bg-white/20" />
                     <div className="text-center">
                       <div className="text-2xl font-bold">{environmentalData.streakDays}</div>
                       <div className="text-blue-100 text-sm">Day Streak</div>
                       <div className="text-xs text-yellow-200 mt-1">🔥 On Fire!</div>
                     </div>
-                    <Separator orientation="vertical" className="h-12 bg-white/20" />
+                    <Separator orientation="vertical" className="h-16 bg-white/20" />
                     <div className="text-center">
                       <div className="text-2xl font-bold">{environmentalData.socialCredits}</div>
                       <div className="text-purple-100 text-sm">Social Credits</div>
@@ -274,17 +350,22 @@ export default function CitizenDashboard() {
               </CardContent>
             </Card>
 
-            <Card className="group hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border-0 bg-gradient-to-br from-purple-500 to-pink-600 text-white overflow-hidden">
+            <Card className="group hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 border-0 bg-gradient-to-br from-yellow-500 to-orange-600 text-white overflow-hidden">
               <CardContent className="p-6 relative">
                 <div className="absolute top-2 right-2 opacity-20">
-                  <Star className="h-16 w-16" />
+                  <span className="text-6xl">🪙</span>
                 </div>
                 <div className="relative">
-                  <div className="text-3xl font-bold mb-1">{environmentalData.totalReports}</div>
-                  <div className="text-purple-100">Reports Submitted</div>
-                  <div className="mt-2 flex items-center text-purple-200">
-                    <Target className="h-4 w-4 mr-1" />
-                    <span className="text-sm">5 more for bonus!</span>
+                  <div className="text-3xl font-bold mb-1">{environmentalData.totalCoins.toLocaleString()}</div>
+                  <div className="text-yellow-100">Eco Coins Earned</div>
+                  <div className="mt-2 flex items-center text-yellow-200">
+                    <TrendingUp className="h-4 w-4 mr-1" />
+                    <span className="text-sm">+{environmentalData.coinsThisMonth} this month</span>
+                  </div>
+                  <div className="mt-2">
+                    <Badge className="bg-white/20 text-yellow-100 border-0">
+                      💰 {environmentalData.coinsPerReport} per report
+                    </Badge>
                   </div>
                 </div>
               </CardContent>
@@ -302,6 +383,138 @@ export default function CitizenDashboard() {
                     <Globe className="h-4 w-4 mr-1" />
                     <span className="text-sm">People helped</span>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Coin Earnings & History */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            
+            {/* Coin Wallet */}
+            <Card className="border-0 shadow-xl bg-gradient-to-br from-yellow-50 via-yellow-100 to-amber-50">
+              <CardHeader className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded-t-lg">
+                <CardTitle className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    🪙 Your Eco Wallet
+                  </span>
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="bg-white/20 border-white/30 text-white hover:bg-white/30"
+                    onClick={() => simulateCoinsEarned(75)}
+                  >
+                    Test Earn +75
+                  </Button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="text-center space-y-4">
+                  <div className="relative">
+                    <div className="text-5xl font-bold text-yellow-600 flex items-center justify-center gap-2">
+                      <span className="text-6xl">🪙</span>
+                      {environmentalData.totalCoins.toLocaleString()}
+                    </div>
+                    {showCoinAnimation && (
+                      <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 animate-ping">
+                        <span className="text-green-500 font-bold text-3xl">+{recentCoinsEarned} 🪙</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div className="p-3 bg-white rounded-lg border border-yellow-200">
+                      <div className="font-bold text-yellow-600">This Month</div>
+                      <div className="text-2xl font-bold text-yellow-700">+{environmentalData.coinsThisMonth}</div>
+                    </div>
+                    <div className="p-3 bg-white rounded-lg border border-yellow-200">
+                      <div className="font-bold text-yellow-600">Per Report</div>
+                      <div className="text-2xl font-bold text-yellow-700">{environmentalData.coinsPerReport}</div>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-gradient-to-r from-green-100 to-blue-100 rounded-lg border border-green-200">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      <Zap className="h-5 w-5 text-yellow-500" />
+                      <span className="font-bold text-green-700">Active Multiplier</span>
+                    </div>
+                    <div className="text-3xl font-bold text-green-600">{environmentalData.bonusMultiplier}x</div>
+                    <div className="text-sm text-green-600">Streak bonus active!</div>
+                  </div>
+
+                  <Progress 
+                    value={(environmentalData.totalCoins / environmentalData.nextMilestone) * 100} 
+                    className="h-3" 
+                  />
+                  <div className="text-sm text-gray-600">
+                    🎯 {environmentalData.nextMilestone - environmentalData.totalCoins} coins to next milestone
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Recent Earnings */}
+            <Card className="lg:col-span-2 border-0 shadow-xl">
+              <CardHeader className="bg-gradient-to-r from-green-50 to-emerald-100 rounded-t-lg">
+                <CardTitle className="text-gray-900 flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    💰 Recent Earnings
+                  </span>
+                  <Badge className="bg-green-100 text-green-800 border-0">
+                    +{recentEarnings.reduce((sum, earning) => sum + earning.coins, 0)} total
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="space-y-4">
+                  {(coinHistory.length > 0 ? coinHistory : recentEarnings).map((earning) => (
+                    <div key={earning.id} className="flex items-center justify-between p-4 bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg border border-gray-200 hover:shadow-md transition-all duration-200">
+                      <div className="flex items-center space-x-4">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                          earning.type === 'report' ? 'bg-blue-100 text-blue-600' :
+                          earning.type === 'streak' ? 'bg-orange-100 text-orange-600' :
+                          earning.type === 'quality' ? 'bg-purple-100 text-purple-600' :
+                          'bg-green-100 text-green-600'
+                        }`}>
+                          {earning.type === 'report' ? '📋' :
+                           earning.type === 'streak' ? '🔥' :
+                           earning.type === 'quality' ? '⭐' : '🎁'}
+                        </div>
+                        <div>
+                          <div className="font-semibold text-gray-900">{earning.action}</div>
+                          {earning.bonus && (
+                            <div className="text-sm text-green-600 font-medium">{earning.bonus}</div>
+                          )}
+                          <div className="text-xs text-gray-500">{earning.time}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="flex items-center gap-1">
+                          <span className="text-2xl font-bold text-green-600">+{earning.coins}</span>
+                          <span className="text-yellow-500">🪙</span>
+                        </div>
+                        {earning.time === 'Just now' && (
+                          <Badge className="bg-green-100 text-green-800 border-0 text-xs animate-pulse">
+                            NEW!
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {coinHistory.length === 0 && (
+                    <div className="text-center py-8">
+                      <div className="text-6xl mb-4">🎯</div>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">Start Earning Coins!</h3>
+                      <p className="text-gray-600 mb-4">Submit your first waste report to earn 50 coins</p>
+                      <Button 
+                        className="bg-gradient-to-r from-[#5770fe] to-[#320e2f] text-white"
+                        onClick={() => window.location.href = '/dashboard'}
+                      >
+                        Submit Report Now +50 🪙
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -472,11 +685,12 @@ export default function CitizenDashboard() {
               {[
                 {
                   icon: <Trash2 className="h-8 w-8" />,
-                  title: "Report Issue",
-                  description: "Report collection problems",
+                  title: "Submit New Report",
+                  description: "Report waste & garbage issues",
                   color: "from-red-500 to-pink-600",
                   iconBg: "bg-red-100 text-red-600",
-                  button: "Report Now"
+                  button: "Submit Report",
+                  action: () => window.location.href = '/dashboard'
                 },
                 {
                   icon: <MapPin className="h-8 w-8" />,
@@ -511,7 +725,10 @@ export default function CitizenDashboard() {
                     </div>
                     <h3 className="font-bold text-gray-900 mb-2 text-lg">{action.title}</h3>
                     <p className="text-gray-600 mb-4">{action.description}</p>
-                    <Button className={`w-full bg-gradient-to-r ${action.color} text-white border-0 group-hover:shadow-lg transition-all duration-300`}>
+                    <Button 
+                      className={`w-full bg-gradient-to-r ${action.color} text-white border-0 group-hover:shadow-lg transition-all duration-300`}
+                      onClick={action.action || (() => {})}
+                    >
                       {action.button}
                       <ChevronRight className="h-4 w-4 ml-2 group-hover:translate-x-1 transition-transform" />
                     </Button>
@@ -811,9 +1028,28 @@ export default function CitizenDashboard() {
           </DialogContent>
         </Dialog>
 
+        {/* Floating Coin Earned Notification */}
+        {showCoinAnimation && (
+          <div className="fixed top-24 right-6 z-50 animate-bounce">
+            <Card className="bg-gradient-to-r from-yellow-400 to-orange-500 text-white border-0 shadow-2xl">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center animate-spin">
+                    <span className="text-2xl">🪙</span>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-lg">Coins Earned!</h4>
+                    <p className="text-yellow-100">+{recentCoinsEarned} Eco Coins</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* Points Milestone Notification */}
         {environmentalData.pointsEarned >= 2500 && environmentalData.pointsEarned < 3000 && (
-          <div className="fixed bottom-6 right-6 max-w-sm">
+          <div className="fixed bottom-6 right-6 max-w-sm z-40">
             <Card className="bg-gradient-to-r from-purple-500 to-pink-500 text-white border-0 shadow-2xl animate-pulse">
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
@@ -823,14 +1059,46 @@ export default function CitizenDashboard() {
                   <div className="flex-1">
                     <h4 className="font-bold">Almost There! 🎯</h4>
                     <p className="text-sm text-purple-100">
-                      Only {3000 - environmentalData.pointsEarned} more points for social media feature!
+                      Only {3000 - environmentalData.pointsEarned} more coins for social media feature!
                     </p>
                     <Button 
                       size="sm" 
                       className="mt-2 bg-white text-purple-600 hover:bg-gray-100"
-                      onClick={() => window.location.href = '/citizen/report'}
+                      onClick={() => {
+                        simulateCoinsEarned(75);
+                        // Also navigate to report page in real app
+                        // window.location.href = '/citizen/report';
+                      }}
                     >
-                      Submit Report +50 pts
+                      Submit Report +50 🪙
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Coin Earning Incentive for New Users */}
+        {environmentalData.totalReports === 0 && (
+          <div className="fixed bottom-6 left-6 max-w-sm z-40">
+            <Card className="bg-gradient-to-r from-green-500 to-emerald-500 text-white border-0 shadow-2xl">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                    <span className="text-2xl animate-bounce">🪙</span>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-bold">Start Earning Coins! 🚀</h4>
+                    <p className="text-sm text-green-100">
+                      Get 50 coins for your first waste report
+                    </p>
+                    <Button 
+                      size="sm" 
+                      className="mt-2 bg-white text-green-600 hover:bg-gray-100"
+                      onClick={() => simulateCoinsEarned(50)}
+                    >
+                      Earn Your First Coins! 🪙
                     </Button>
                   </div>
                 </div>
