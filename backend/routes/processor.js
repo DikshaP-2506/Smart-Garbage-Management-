@@ -3,38 +3,18 @@ import supabase from '../config/supabaseClient.js'
 import { analyzeImage } from '../services/visionService.js'
 import { processText } from '../services/nlpService.js'
 import { transcribeAudio } from '../services/speechService.js'
+import { getRainProbability } from '../services/weatherService.js'
+import { calculateRisk } from '../services/riskEngine.js'
 
 const router = express.Router()
 
-// ✅ 1️⃣ CREATE TEST TICKET ROUTE (PUT THIS FIRST)
-router.post('/create-test', async (req, res) => {
-  const { data, error } = await supabase
-    .from('tickets')
-    .insert([{
-      before_image_path: "https://example.com/test.jpg",
-      description: "Bhaiya yaha bohot kachra hai aur naali block hai",
-      description_type: "TEXT",
-      latitude: 19.0760,
-      longitude: 72.8777,
-      is_location_verified: false
-      // ❌ DO NOT SEND status
-      // ❌ DO NOT SEND priority
-    }])
-    .select()
-
-  if (error) {
-    console.log(error)
-    return res.status(400).json(error)
-  }
-
-  res.json(data)
-})
-
-// ✅ 2️⃣ MAIN AI PROCESSOR ROUTE
+// ✅ MAIN PROCESSOR
 router.post('/:ticketId', async (req, res) => {
   try {
     const { ticketId } = req.params
+    console.log("🔥 MODULE 3 STARTED:", ticketId)
 
+    // 1️⃣ Fetch ticket
     const { data: ticket, error } = await supabase
       .from('tickets')
       .select('*')
@@ -42,57 +22,77 @@ router.post('/:ticketId', async (req, res) => {
       .single()
 
     if (error || !ticket) {
+      console.log("Ticket fetch error:", error)
       return res.status(404).json({ error: "Ticket not found" })
     }
 
-    let finalText = ticket.description
+    // 2️⃣ Convert image path to public URL
+    const { data: publicUrlData } = supabase
+      .storage
+      .from('reports')
+      .getPublicUrl(ticket.before_image_path)
 
-    if (ticket.description_type === "VOICE") {
-      const { data: voiceData } = await supabase
-        .from('voice_transcripts')
-        .select('*')
-        .eq('ticket_id', ticketId)
-        .single()
+    const publicImageUrl = publicUrlData.publicUrl
 
-      if (!voiceData) {
-        return res.status(400).json({ error: "Voice record not found" })
-      }
+    console.log("Public Image URL:", publicImageUrl)
 
-      const transcript = await transcribeAudio(voiceData.original_audio_path)
+    // 3️⃣ Vision AI
+    const visionResult = await analyzeImage(publicImageUrl)
 
-      await supabase
-        .from('voice_transcripts')
-        .update({ transcript_text: transcript })
-        .eq('ticket_id', ticketId)
+    console.log("Vision Result:", visionResult)
 
-      finalText = transcript
+    const wasteType = visionResult?.waste_type || null
+    const drainBlocked = visionResult?.drain_blocked ?? null
+
+    // 4️⃣ NLP (if text exists)
+    let translatedText = null
+    if (ticket.description) {
+      const nlpResult = await processText(ticket.description)
+      translatedText = nlpResult?.translated_text || null
     }
 
-    const visionResult = await analyzeImage(ticket.before_image_path)
-    const wasteType = visionResult.waste_type
-    const drainBlocked = visionResult.drain_blocked
+    // 5️⃣ Weather API
+    const weatherData = await getRainProbability(
+      ticket.latitude,
+      ticket.longitude
+    )
 
-    const nlpResult = await processText(finalText)
-    const translatedText = nlpResult.translated_text
+    const rainProbability = weatherData?.rain_probability || 0
 
-    await supabase
+    // 6️⃣ Risk Logic
+    const priority = calculateRisk(drainBlocked, rainProbability)
+
+    console.log("Calculated Priority:", priority)
+
+    // 7️⃣ UPDATE DATABASE 🔥🔥🔥
+    const { error: updateError } = await supabase
       .from('tickets')
       .update({
         waste_type: wasteType,
         drain_blocked: drainBlocked,
         translated_description: translatedText,
-        status: "AI_PROCESSED"
+        rain_probability: rainProbability,
+        weather_metadata: weatherData,
+        priority: priority,
+        status: "OPEN"
       })
       .eq('id', ticketId)
 
-    res.json({
-      success: true,
-      message: "Ticket processed successfully"
-    })
+    if (updateError) {
+      console.log("Update error:", updateError)
+      return res.status(500).json(updateError)
+    }
+
+    console.log("✅ Ticket updated successfully")
+
+    res.json({ success: true })
 
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: "Processing failed" })
+    console.error("🔥 MODULE 3 CRASH:", err.response?.data || err.message)
+    res.status(500).json({
+      error: "Processing failed",
+      details: err.response?.data || err.message
+    })
   }
 })
 
