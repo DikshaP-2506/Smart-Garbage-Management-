@@ -133,6 +133,7 @@ export type Database = {
           category: string
           citizen_id: number
           image_url?: string
+          ticket_count: number
           created_at: string
           updated_at: string
         }
@@ -148,6 +149,7 @@ export type Database = {
           category: string
           citizen_id: number
           image_url?: string
+          ticket_count?: number
           created_at?: string
           updated_at?: string
         }
@@ -163,6 +165,7 @@ export type Database = {
           category?: string
           citizen_id?: number
           image_url?: string
+          ticket_count?: number
           created_at?: string
           updated_at?: string
         }

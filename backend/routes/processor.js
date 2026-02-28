@@ -2,7 +2,7 @@ import express from 'express'
 import supabase from '../config/supabaseClient.js'
 import { analyzeImage } from '../services/visionService.js'
 import { processText } from '../services/nlpService.js'
-import { transcribeAudio } from '../services/speechService.js'
+import { transcribeAudioBuffer } from '../services/speechService.js'
 import { getRainProbability } from '../services/weatherService.js'
 import { calculateRisk } from '../services/riskEngine.js'
 

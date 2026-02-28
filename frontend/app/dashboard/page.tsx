@@ -179,7 +179,7 @@ export default function Dashboard() {
       formData.append("audio", audioBlob)
     }
 
-    await axios.post("http://localhost:5000/api/report", formData)
+    await axios.post("http://localhost:5000/api/reports/submit", formData)
 
     setLoading(false)
     alert("Report Submitted Successfully!")

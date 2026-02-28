@@ -2,6 +2,9 @@ import express from 'express';
 import multer from 'multer';
 import crypto from 'crypto';
 import supabase from '../config/supabaseClient.js';
+import { transcribeAudioBuffer } from '../services/speechService.js';
+import { analyzeImage } from '../services/visionService.js';
+import { processText } from '../services/nlpService.js';
 
 const router = express.Router();
 
@@ -10,53 +13,16 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB limit
-  },
-  fileFilter: (req, file, cb) => {
-    // Only allow image files for image field, any file for voice
-    if (file.fieldname === 'image' && file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else if (file.fieldname === 'voiceNote' && file.mimetype.startsWith('audio/')) {
-      cb(null, true);
-    } else if (file.fieldname === 'voiceNote') {
-      // Allow wav files even if mimetype is not detected correctly
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type'), false);
-    }
   }
 });
 
 // 🎯 SUBMIT GEO-VERIFIED REPORT
-router.post('/submit', upload.fields([
-  { name: 'image', maxCount: 1 },
-  { name: 'voiceNote', maxCount: 1 }
-]), async (req, res) => {
+router.post('/submit', upload.any(), async (req, res) => {
   try {
     console.log('📝 Report submission started');
-    
-    // Get authenticated user from Supabase auth
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return res.status(401).json({ error: 'Authorization header required' });
-    }
 
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
-    if (authError || !user) {
-      return res.status(401).json({ error: 'Invalid authentication token' });
-    }
-
-    // Get user profile
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, full_name, ward_id')
-      .eq('auth_users_id', user.id)
-      .single();
-
-    if (profileError || !profile) {
-      return res.status(404).json({ error: 'User profile not found' });
-    }
+    // Auth bypassed — no citizen_id needed
+    const profile = { ward_id: null };
 
     const {
       imageHash,
@@ -64,37 +30,30 @@ router.post('/submit', upload.fields([
       latitude,
       longitude,
       locationAccuracy,
-      description,
-      confidenceScore,
-      classification,
       confidenceBreakdown,
       imageLatitude,
       imageLongitude,
       exifTimestamp
     } = req.body;
 
-    // Validation
-    if (!req.files?.image?.[0]) {
-      return res.status(400).json({ error: 'Image is required' });
-    }
+    // Support both 'description' and 'text' field names
+    let description = req.body.description || req.body.text || '';
+    // Default confidence values if not provided
+    const confidenceScore = req.body.confidenceScore || '0.5';
+    const classification = req.body.classification || 'low';
 
-    if (!description || description.trim().length < 20) {
-      if (!req.files?.voiceNote?.[0]) {
-        return res.status(400).json({ error: 'Description (20+ characters) or voice note is required' });
-      }
+    // Validation
+    const imageFile = req.files?.find(f => f.fieldname === 'image');
+    if (!imageFile) {
+      return res.status(400).json({ error: 'Image is required' });
     }
 
     if (!latitude || !longitude) {
       return res.status(400).json({ error: 'GPS location is required' });
     }
 
-    if (!confidenceScore || !classification) {
-      return res.status(400).json({ error: 'Confidence scoring is required' });
-    }
-
     // 📸 UPLOAD IMAGE TO STORAGE
-    const imageFile = req.files.image[0];
-    const imageFileName = `reports/${user.id}/${Date.now()}-${imageFile.originalname}`;
+    const imageFileName = `reports/${profile.id || 'anon'}/${Date.now()}-${imageFile.originalname}`;
     
     let imageUrl = `data:image/jpeg;base64,${imageFile.buffer.toString('base64')}`;
     
@@ -116,67 +75,162 @@ router.post('/submit', upload.fields([
       console.log('Using base64 image storage fallback');
     }
 
-    // 🎙 UPLOAD VOICE NOTE (if provided)
-    let voiceNoteUrl = null;
-    if (req.files?.voiceNote?.[0]) {
-      const voiceFile = req.files.voiceNote[0];
-      voiceNoteUrl = `data:audio/wav;base64,${voiceFile.buffer.toString('base64')}`;
-    }
-
-    // 🎯 CREATE TICKET RECORD
-    console.log('💾 Creating ticket record...');
-    
-    const ticketData = {
-      // Core report data - match your existing table structure
-      description: description.trim(),
-      priority: classification === 'high' ? 'HIGH' : 
-               classification === 'medium' ? 'MEDIUM' : 'LOW',
-      status: 'PENDING',
-      
-      // Link to user - adjust column name if different in your table
-      citizen_id: profile.id,  // or user_id if that's what you use
-      
-      // Image data - newly added columns from your ALTER TABLE command
-      before_image_path: imageUrl,  // Using existing column name
-      image_hash: imageHash,
-      image_source: imageSource,
-      
-      // Location data - existing columns
-      latitude: parseFloat(latitude),
-      longitude: parseFloat(longitude),
-      location_accuracy: parseFloat(locationAccuracy),
-      
-      // Image location data - newly added columns
-      image_latitude: imageLatitude ? parseFloat(imageLatitude) : null,
-      image_longitude: imageLongitude ? parseFloat(imageLongitude) : null,
-      exif_timestamp: exifTimestamp ? new Date(exifTimestamp) : null,
-      
-      // Voice note (if you have this column)
-      voice_transcript: voiceNoteUrl,
-      
-      // Confidence scoring - newly added columns
-      confidence_score: parseFloat(confidenceScore),
-      is_flagged: classification === 'flagged'
-    };
-
-    // Insert into your existing tickets table
-    const { data: insertedTicket, error: ticketError } = await supabase
-      .from('tickets')
-      .insert(ticketData)
-      .select('*')
-      .single();
-
-    if (ticketError) {
-      console.error('Failed to insert ticket:', ticketError);
-      return res.status(500).json({ 
-        error: 'Failed to save report',
-        details: ticketError.message 
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 🤖  AI GATE 1 — Gemini Vision: verify garbage present
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    let visionResult = null;
+    try {
+      console.log('🖼️ Running Vision AI gate...');
+      visionResult = await analyzeImage(imageFile.buffer, imageFile.mimetype);
+      console.log('✅ Vision result:', visionResult);
+    } catch (visionError) {
+      console.error('❌ Vision AI error:', visionError.message);
+      return res.status(503).json({
+        rejected: true,
+        reason: 'vision_unavailable',
+        message: 'Image analysis service is currently unavailable. Please try again in a moment.'
       });
     }
 
-    const ticket = insertedTicket;
+    if (!visionResult || !visionResult.has_garbage) {
+      console.log('🚫 Vision gate REJECTED — no garbage detected');
+      return res.status(422).json({
+        rejected: true,
+        reason: 'vision_failed',
+        message: 'No garbage or waste detected in the submitted image. Please upload a clear photo showing the waste.',
+        confidence: visionResult?.confidence ?? 0,
+        waste_type: visionResult?.waste_type ?? 'none'
+      });
+    }
 
-    console.log('✅ Ticket created successfully:', ticket.id);
+    console.log(`✅ Vision gate PASSED — ${visionResult.waste_type}, severity: ${visionResult.severity}, drain_blocked: ${visionResult.drain_blocked}`);
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 🎤  AI GATE 2 — Deepgram: transcribe audio (if any)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    let voiceNoteUrl = null;
+    const voiceFile = req.files?.find(f => f.fieldname === 'audio');
+    if (voiceFile) {
+      voiceNoteUrl = `data:audio/webm;base64,${voiceFile.buffer.toString('base64')}`;
+      // Transcribe with Deepgram and use as description if no text provided
+      try {
+        console.log('🎤 Transcribing audio with Deepgram...');
+        const transcript = await transcribeAudioBuffer(voiceFile.buffer, voiceFile.mimetype);
+        console.log('✅ Transcript:', transcript);
+        if (transcript && transcript.trim().length > 0) {
+          // Use transcript as description (override empty/short text)
+          if (!description || description.trim().length < 10) {
+            description = transcript;
+          }
+        }
+      } catch (transcribeError) {
+        console.error('Deepgram transcription failed:', transcribeError.message);
+        // Non-fatal — continue without transcript
+      }
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 📝  NLP enrichment (optional — does NOT block ticket)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    let nlpResult = null;
+    try {
+      console.log('📝 Running NLP enrichment...');
+      nlpResult = await processText(description || 'No description provided');
+      console.log('✅ NLP result:', nlpResult);
+      // Use translated/cleaned description if available
+      if (nlpResult?.translated_text && nlpResult.translated_text.trim().length > 5) {
+        description = nlpResult.translated_text;
+      }
+    } catch (nlpError) {
+      console.warn('⚠️ NLP unavailable — continuing without enrichment:', nlpError.message);
+      // Non-fatal: vision already confirmed garbage, proceed regardless
+    }
+
+    // 🎯 CREATE OR INCREMENT TICKET RECORD
+    console.log('💾 Checking for existing ticket at same location...');
+
+    const lat = parseFloat(latitude);
+    const lng = parseFloat(longitude);
+    const LOCATION_TOLERANCE = 0.0001; // ~10 metres
+
+    // Look for an existing ticket at the same location
+    const { data: existingTickets } = await supabase
+      .from('tickets')
+      .select('id, ticket_count')
+      .gte('latitude', lat - LOCATION_TOLERANCE)
+      .lte('latitude', lat + LOCATION_TOLERANCE)
+      .gte('longitude', lng - LOCATION_TOLERANCE)
+      .lte('longitude', lng + LOCATION_TOLERANCE)
+      .in('status', ['NEW', 'OPEN', 'PENDING'])
+      .order('created_at', { ascending: true })
+      .limit(1);
+
+    let ticket;
+
+    if (existingTickets && existingTickets.length > 0) {
+      // Same location: increment count on existing ticket
+      const existing = existingTickets[0];
+      const newCount = (existing.ticket_count || 1) + 1;
+      console.log(`📍 Same location found (id: ${existing.id}), incrementing count to ${newCount}`);
+
+      const { data: updatedTicket, error: updateError } = await supabase
+        .from('tickets')
+        .update({ ticket_count: newCount })
+        .eq('id', existing.id)
+        .select('*')
+        .single();
+
+      if (updateError) {
+        console.error('Failed to increment ticket count:', updateError);
+        return res.status(500).json({ error: 'Failed to update ticket count', details: updateError.message });
+      }
+
+      ticket = updatedTicket;
+      console.log(`✅ Ticket count incremented: ${ticket.id} → count: ${ticket.ticket_count}`);
+
+    } else {
+      // New location: create a new ticket
+      console.log('💾 New location, creating ticket record...');
+
+      const ticketData = {
+        description: description.trim() || 'No description provided',
+        description_type: 'TEXT',
+        status: 'PENDING',
+        citizen_id: null,
+        ward_id: null,
+        before_image_path: imageUrl,
+        image_hash: imageHash || null,
+        image_source: null,
+        latitude: lat,
+        longitude: lng,
+        location_accuracy: parseFloat(locationAccuracy) || null,
+        image_latitude: imageLatitude ? parseFloat(imageLatitude) : null,
+        image_longitude: imageLongitude ? parseFloat(imageLongitude) : null,
+        exif_timestamp: exifTimestamp ? new Date(exifTimestamp) : null,
+        confidence_score: parseFloat(confidenceScore) || 0.5,
+        is_flagged: classification === 'flagged',
+        voice_transcript: voiceNoteUrl,
+        ticket_count: 1,
+        // AI-extracted fields
+        waste_type: visionResult?.waste_type || nlpResult?.waste_type || null,
+        drain_blocked: visionResult?.drain_blocked ?? nlpResult?.drain_mentioned ?? false,
+        translated_description: nlpResult?.translated_text || null
+      };
+
+      const { data: insertedTicket, error: ticketError } = await supabase
+        .from('tickets')
+        .insert(ticketData)
+        .select('*')
+        .single();
+
+      if (ticketError) {
+        console.error('Failed to insert ticket:', ticketError);
+        return res.status(500).json({ error: 'Failed to save report', details: ticketError.message });
+      }
+
+      ticket = insertedTicket;
+      console.log('✅ Ticket created successfully:', ticket.id);
+    }
 
     // 📊 RETURN SUCCESS RESPONSE
     res.status(201).json({
@@ -234,142 +288,50 @@ router.post('/check-duplicate', async (req, res) => {
 // 📊 GET USER'S REPORTS
 router.get('/my-reports', async (req, res) => {
   try {
-    // Get authenticated user
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-      return res.status(401).json({ error: 'Authorization header required' });
-    }
-
-    const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
-    
-    if (authError || !user) {
-      return res.status(401).json({ error: 'Invalid authentication token' });
-    }
-
-    // Get user profile
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, user_data')
-      .eq('auth_users_id', user.id)
-      .single();
-
-    if (profileError || !profile) {
-      return res.status(404).json({ error: 'User profile not found' });
-    }
-
-    // Get reports with pagination
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
     const statusFilter = req.query.status;
 
-    let reports = [];
-    let totalCount = 0;
+    let query = supabase
+      .from('tickets')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
 
-    // Fetch from your existing tickets table
-    try {
-      let query = supabase
-        .from('tickets')
-        .select(`
-          id,
-          description,
-          status,
-          priority,
-          before_image_path,
-          image_source,
-          image_hash,
-          latitude,
-          longitude,
-          location_accuracy,
-          image_latitude,
-          image_longitude,
-          exif_timestamp,
-          confidence_score,
-          is_flagged,
-          created_at
-        `, { count: 'exact' })
-        .eq('citizen_id', profile.id)  // Filter by user
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
-
-      if (statusFilter && statusFilter !== 'ALL') {
-        query = query.eq('status', statusFilter);
-      }
-
-      const { data: ticketsData, error: ticketsError, count } = await query;
-
-      if (!ticketsError && ticketsData) {
-        // Transform data to match frontend expectations
-        reports = ticketsData.map(ticket => ({
-          ticket_id: `TKT-${ticket.id}`, // Create a display ID
-          title: `Flood Report #${ticket.id}`,
-          description: ticket.description,
-          status: ticket.status,
-          priority: ticket.priority,
-          classification: ticket.is_flagged ? 'flagged' : 'high',
-          confidence_score: ticket.confidence_score || 0,
-          image_url: ticket.before_image_path,
-          voice_note_url: null, // Add if you have voice data
-          latitude: ticket.latitude,
-          longitude: ticket.longitude,
-          created_at: ticket.created_at,
-          updated_at: ticket.created_at
-        }));
-        totalCount = count || 0;
-      } else {
-        console.log('Tickets query error:', ticketsError);
-        throw new Error('Tickets table query failed');
-      }
-
-    } catch (tableError) {
-      console.log('Fetching from alternative storage...');
-      
-      // Fallback to profile user_data as backup
-      if (profile.user_data && profile.user_data.reports) {
-        const allReports = profile.user_data.reports || [];
-        
-        // Apply status filter
-        let filteredReports = allReports;
-        if (statusFilter && statusFilter !== 'ALL') {
-          filteredReports = allReports.filter(report => report.status === statusFilter);
-        }
-        
-        // Apply pagination
-        totalCount = filteredReports.length;
-        reports = filteredReports.slice(offset, offset + limit);
-      } else {
-        // Generate sample data for demo
-        const sampleReports = [
-          {
-            ticket_id: 'TKT-DEMO-001',
-            title: 'Sample Flood Report',
-            description: 'This is a demonstration report showing the geo-verified submission system.',
-            status: 'PENDING',
-            priority: 'MEDIUM',
-            classification: 'high',
-            confidence_score: 85,
-            image_url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgdmlld0JveD0iMCAwIDEwMCAxMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiBmaWxsPSIjZjNmNGY2Ii8+Cjx0ZXh0IHg9IjUwIiB5PSI1NSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iIzM3NDE1MSIgZm9udC1mYW1pbHk9Im1vbm9zcGFjZSIgZm9udC1zaXplPSIxNCI+U2FtcGxlPC90ZXh0Pgo8L3N2Zz4K',
-            voice_note_url: null,
-            latitude: 23.5558,
-            longitude: 87.2877,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }
-        ];
-        
-        reports = sampleReports;
-        totalCount = sampleReports.length;
-      }
+    if (statusFilter && statusFilter !== 'ALL') {
+      query = query.eq('status', statusFilter);
     }
 
+    const { data: ticketsData, error: ticketsError, count } = await query;
+
+    if (ticketsError) {
+      console.error('Tickets query error:', ticketsError);
+      return res.status(500).json({ error: 'Failed to fetch tickets' });
+    }
+
+    const reports = (ticketsData || []).map(ticket => ({
+      ticket_id: `TKT-${ticket.id}`,
+      title: `Report #${ticket.id.slice(0, 8)}`,
+      description: ticket.description,
+      status: ticket.status,
+      priority: ticket.priority,
+      classification: ticket.is_flagged ? 'flagged' : 'low',
+      confidence_score: ticket.confidence_score || 0,
+      image_url: ticket.before_image_path,
+      latitude: ticket.latitude,
+      longitude: ticket.longitude,
+      created_at: ticket.created_at,
+      updated_at: ticket.created_at
+    }));
+
     res.json({
-      reports: reports || [],
+      reports,
       pagination: {
         page,
         limit,
-        total: totalCount,
-        totalPages: Math.ceil(totalCount / limit)
+        total: count || 0,
+        totalPages: Math.ceil((count || 0) / limit)
       }
     });
 
