@@ -5,6 +5,8 @@ import supabase from '../config/supabaseClient.js';
 import { transcribeAudioBuffer } from '../services/speechService.js';
 import { analyzeImage } from '../services/visionService.js';
 import { processText } from '../services/nlpService.js';
+import { getRainProbability } from '../services/weatherService.js';
+import { calculateRisk } from '../services/riskEngine.js';
 
 const router = express.Router();
 
@@ -146,6 +148,36 @@ router.post('/submit', upload.any(), async (req, res) => {
       // Non-fatal: vision already confirmed garbage, proceed regardless
     }
 
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 🌧️  MODULE 4 — Environmental Risk Engine
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    let rainProbability = null;
+    let weatherMetadata = null;
+    let priority = 'NORMAL';
+
+    try {
+      console.log('🌧️ Fetching 24-hour rain forecast...');
+      const weatherResult = await getRainProbability(parseFloat(latitude), parseFloat(longitude));
+      rainProbability = weatherResult.rain_probability;
+      weatherMetadata = weatherResult.raw_weather?.city
+        ? {
+            city: weatherResult.raw_weather.city.name,
+            country: weatherResult.raw_weather.city.country,
+            rain_probability_pct: rainProbability,
+            fetched_at: new Date().toISOString()
+          }
+        : { rain_probability_pct: rainProbability, fetched_at: new Date().toISOString() };
+
+      const drainBlocked = visionResult?.drain_blocked ?? false;
+      const severity     = visionResult?.severity ?? 'low';
+      priority = calculateRisk(drainBlocked, rainProbability, severity);
+
+      console.log(`✅ Risk: priority=${priority}, rain=${rainProbability?.toFixed(1)}%, drain_blocked=${drainBlocked}`);
+    } catch (weatherError) {
+      console.warn('⚠️ Weather service unavailable — defaulting priority to NORMAL:', weatherError.message);
+      // Non-fatal: ticket still created with NORMAL priority
+    }
+
     // 🎯 CREATE OR INCREMENT TICKET RECORD
     console.log('💾 Checking for existing ticket at same location...');
 
@@ -214,7 +246,11 @@ router.post('/submit', upload.any(), async (req, res) => {
         // AI-extracted fields
         waste_type: visionResult?.waste_type || nlpResult?.waste_type || null,
         drain_blocked: visionResult?.drain_blocked ?? nlpResult?.drain_mentioned ?? false,
-        translated_description: nlpResult?.translated_text || null
+        translated_description: nlpResult?.translated_text || null,
+        // Module 4 — Environmental Risk Engine
+        priority: priority,
+        rain_probability: rainProbability ?? null,
+        weather_metadata: weatherMetadata
       };
 
       const { data: insertedTicket, error: ticketError } = await supabase
