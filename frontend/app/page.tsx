@@ -1,4 +1,5 @@
 import Navbar from '@/components/navbar';
+import Link from 'next/link';
 
 export default function Home() {
   return (
@@ -27,9 +28,9 @@ export default function Home() {
           
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mt-8">
-            <button className="px-8 py-4 bg-white text-black rounded-lg font-semibold hover:bg-gray-100 transition-all duration-200 text-lg">
+            <Link href="/login" className="px-8 py-4 bg-white text-black rounded-lg font-semibold hover:bg-gray-100 transition-all duration-200 text-lg">
               Get Started
-            </button>
+            </Link>
             <button className="px-8 py-4 border border-border text-foreground rounded-lg font-semibold hover:bg-secondary transition-all duration-200 text-lg">
               Learn More
             </button>

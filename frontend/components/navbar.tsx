@@ -15,20 +15,9 @@ export default function Navbar() {
             <span className="text-lg font-semibold text-foreground">AI App</span>
           </Link>
 
-          {/* Right: Auth buttons */}
+          {/* Right: Navigation items */}
           <div className="flex items-center gap-4">
-            <Link
-              href="/login"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Log in
-            </Link>
-            <Link
-              href="/signup"
-              className="px-4 py-2 text-sm bg-white text-black rounded-md hover:bg-gray-100 transition-colors font-medium"
-            >
-              Sign up
-            </Link>
+            {/* Add other navigation items here if needed */}
           </div>
         </div>
       </div>

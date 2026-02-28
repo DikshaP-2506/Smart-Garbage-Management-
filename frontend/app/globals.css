@@ -4,76 +4,76 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Light theme (kept simple; dark is default) */
-  --background: #f7f7f8;
-  --foreground: #1f1f22;
+  /* FloodGuard AI Color Scheme */
+  --background: #ffffff;
+  --foreground: #1f2937;
   --card: #ffffff;
-  --card-foreground: #1f1f22;
+  --card-foreground: #1f2937;
   --popover: #ffffff;
-  --popover-foreground: #1f1f22;
-  --primary: #7c3aed;
+  --popover-foreground: #1f2937;
+  --primary: #1e3a8a; /* Deep Blue */
   --primary-foreground: #ffffff;
-  --secondary: #e5e7eb;
-  --secondary-foreground: #111827;
-  --muted: #eef0f3;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #1e3a8a;
+  --muted: #f8fafc;
   --muted-foreground: #6b7280;
-  --accent: #8b5cf6;
+  --accent: #0d9488; /* Teal */
   --accent-foreground: #ffffff;
-  --destructive: #ef4444;
+  --destructive: #dc2626;
   --destructive-foreground: #ffffff;
   --border: #e5e7eb;
   --input: #ffffff;
-  --ring: #8b5cf6;
-  --chart-1: #8b5cf6;
-  --chart-2: #06b6d4;
+  --ring: #1e3a8a;
+  --chart-1: #1e3a8a;
+  --chart-2: #0d9488;
   --chart-3: #f59e0b;
   --chart-4: #10b981;
-  --chart-5: #ef4444;
-  --radius: 0.625rem;
+  --chart-5: #dc2626;
+  --radius: 0.75rem;
   --sidebar: #ffffff;
-  --sidebar-foreground: #1f1f22;
-  --sidebar-primary: #8b5cf6;
+  --sidebar-foreground: #1f2937;
+  --sidebar-primary: #1e3a8a;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #eef0f3;
-  --sidebar-accent-foreground: #1f1f22;
+  --sidebar-accent: #f8fafc;
+  --sidebar-accent-foreground: #1f2937;
   --sidebar-border: #e5e7eb;
-  --sidebar-ring: #8b5cf6;
+  --sidebar-ring: #1e3a8a;
 }
 
 .dark {
-  /* Pure black theme */
-  --background: #000000; /* pure black */
-  --foreground: #ffffff; /* pure white text */
-  --card: #111111;
-  --card-foreground: #ffffff;
-  --popover: #111111;
-  --popover-foreground: #ffffff;
-  --primary: #8b5cf6; /* violet */
-  --primary-foreground: #000000;
-  --secondary: #1a1a1a;
-  --secondary-foreground: #ffffff;
-  --muted: #0a0a0a;
-  --muted-foreground: #888888;
-  --accent: #7c3aed;
+  /* Dark mode for FloodGuard AI (optional) */
+  --background: #0f172a;
+  --foreground: #f8fafc;
+  --card: #1e293b;
+  --card-foreground: #f8fafc;
+  --popover: #1e293b;
+  --popover-foreground: #f8fafc;
+  --primary: #3b82f6;
+  --primary-foreground: #ffffff;
+  --secondary: #334155;
+  --secondary-foreground: #f8fafc;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --accent: #14b8a6;
   --accent-foreground: #ffffff;
-  --destructive: #ef4444;
+  --destructive: #dc2626;
   --destructive-foreground: #ffffff;
-  --border: #1a1a1a;
-  --input: #0a0a0a;
-  --ring: #7c3aed;
-  --chart-1: #8b5cf6;
-  --chart-2: #06b6d4;
+  --border: #334155;
+  --input: #1e293b;
+  --ring: #3b82f6;
+  --chart-1: #3b82f6;
+  --chart-2: #14b8a6;
   --chart-3: #f59e0b;
   --chart-4: #10b981;
-  --chart-5: #ef4444;
-  --sidebar: #000000;
-  --sidebar-foreground: #ffffff;
-  --sidebar-primary: #8b5cf6;
+  --chart-5: #dc2626;
+  --sidebar: #0f172a;
+  --sidebar-foreground: #f8fafc;
+  --sidebar-primary: #3b82f6;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #1a1a1a;
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #1a1a1a;
-  --sidebar-ring: #7c3aed;
+  --sidebar-accent: #334155;
+  --sidebar-accent-foreground: #f8fafc;
+  --sidebar-border: #334155;
+  --sidebar-ring: #3b82f6;
 }
 
 @theme inline {
@@ -121,28 +121,64 @@
   * {
     @apply border-border outline-ring/50;
   }
+  
   body {
-    @apply bg-black text-foreground;
-    /* Pure black background with lavender gradient center */
-    background: #000000;
-    min-height: 100vh;
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
   
-  /* Force all containers to be transparent */
-  main, div:not(.navbar):not(.border) {
-    background: transparent !important;
+  /* FloodGuard AI specific styles */
+  .floodguard-gradient {
+    background: linear-gradient(135deg, #1e3a8a 0%, #0d9488 100%);
   }
   
-  /* Fallback glow */
-  body::before {
-    content: '';
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    width: 500px;
-    height: 500px;
-    transform: translate(-50%, -50%);
-    pointer-events: none;
-    z-index: -1;
+  .floodguard-card {
+    @apply bg-white border border-gray-200 rounded-xl shadow-lg;
+  }
+  
+  .floodguard-input {
+    @apply h-12 px-4 text-base rounded-lg border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20;
+  }
+  
+  .floodguard-button {
+    @apply bg-blue-900 hover:bg-blue-800 text-white font-medium py-3 px-6 rounded-lg transition-colors;
+  }
+  
+  .floodguard-button-secondary {
+    @apply bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 font-medium py-3 px-6 rounded-lg transition-colors;
+  }
+  
+  /* Animation utilities */
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .animate-fade-in {
+    animation: fade-in 0.5s ease-out;
+  }
+  
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: #f1f1f1;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
   }
 }
