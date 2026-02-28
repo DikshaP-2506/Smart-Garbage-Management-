@@ -278,7 +278,14 @@ router.post('/submit', upload.any(), async (req, res) => {
         confidenceScore: ticket.confidence_score || parseFloat(confidenceScore),
         classification: classification,
         createdAt: ticket.created_at || new Date().toISOString(),
-        isflagged: ticket.is_flagged || false
+        isflagged: ticket.is_flagged || false,
+        // AI + Risk Engine outputs
+        priority: priority,
+        rain_probability: rainProbability,
+        drain_blocked: visionResult?.drain_blocked ?? false,
+        waste_type: visionResult?.waste_type || null,
+        severity: visionResult?.severity || null,
+        weather_metadata: weatherMetadata
       }
     });
 

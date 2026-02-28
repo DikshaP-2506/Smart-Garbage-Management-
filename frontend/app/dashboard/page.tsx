@@ -21,6 +21,7 @@ export default function Dashboard() {
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
   const [coordinates, setCoordinates] = useState<any>(null)
   const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState<any>(null)
 
   // 📍 Get Location
   const getLocation = () => {
@@ -179,10 +180,19 @@ export default function Dashboard() {
       formData.append("audio", audioBlob)
     }
 
-    await axios.post("http://localhost:5000/api/reports/submit", formData)
+    try {
+      const response = await axios.post("http://localhost:5000/api/reports/submit", formData)
+      setResult(response.data.ticket)
+    } catch (err: any) {
+      const data = err?.response?.data
+      if (data?.rejected) {
+        alert(`❌ Report Rejected: ${data.message}`)
+      } else {
+        alert("Submission failed. Please try again.")
+      }
+    }
 
     setLoading(false)
-    alert("Report Submitted Successfully!")
   }
 
   return (
@@ -318,6 +328,76 @@ export default function Dashboard() {
         >
           {loading ? "Submitting..." : "Submit Report"}
         </button>
+
+        {/* ✅ Submission Result Card */}
+        {result && (() => {
+          const priorityConfig: Record<string, { bg: string; border: string; badge: string; icon: string }> = {
+            CRITICAL: { bg: "bg-red-50",    border: "border-red-500",   badge: "bg-red-600 text-white",    icon: "🚨" },
+            HIGH:     { bg: "bg-orange-50", border: "border-orange-500", badge: "bg-orange-500 text-white", icon: "🔴" },
+            MEDIUM:   { bg: "bg-yellow-50", border: "border-yellow-500", badge: "bg-yellow-500 text-white", icon: "🟡" },
+            LOW:      { bg: "bg-blue-50",   border: "border-blue-400",   badge: "bg-blue-500 text-white",   icon: "🔵" },
+            NORMAL:   { bg: "bg-green-50",  border: "border-green-400",  badge: "bg-green-600 text-white",  icon: "🟢" },
+          }
+          const p = result.priority ?? "NORMAL"
+          const cfg = priorityConfig[p] ?? priorityConfig.NORMAL
+          return (
+            <div className={`mt-6 rounded-xl border-2 ${cfg.border} ${cfg.bg} p-5`}>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-lg font-bold text-gray-800">✅ Report Submitted</h2>
+                <span className={`text-sm font-bold px-3 py-1 rounded-full ${cfg.badge}`}>
+                  {cfg.icon} {p}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="bg-white rounded-lg p-3 shadow-sm">
+                  <p className="text-gray-500 text-xs mb-1">Ticket ID</p>
+                  <p className="font-mono font-semibold text-gray-800 truncate">{result.id}</p>
+                </div>
+
+                <div className="bg-white rounded-lg p-3 shadow-sm">
+                  <p className="text-gray-500 text-xs mb-1">Status</p>
+                  <p className="font-semibold text-gray-800">{result.status}</p>
+                </div>
+
+                <div className="bg-white rounded-lg p-3 shadow-sm">
+                  <p className="text-gray-500 text-xs mb-1">Waste Type</p>
+                  <p className="font-semibold text-gray-800 capitalize">{result.waste_type ?? "—"}</p>
+                </div>
+
+                <div className="bg-white rounded-lg p-3 shadow-sm">
+                  <p className="text-gray-500 text-xs mb-1">Severity</p>
+                  <p className="font-semibold text-gray-800 capitalize">{result.severity ?? "—"}</p>
+                </div>
+
+                <div className="bg-white rounded-lg p-3 shadow-sm">
+                  <p className="text-gray-500 text-xs mb-1">🌧 Rain (24 h)</p>
+                  <p className="font-semibold text-gray-800">
+                    {result.rain_probability != null
+                      ? `${Number(result.rain_probability).toFixed(1)}%`
+                      : "—"}
+                  </p>
+                </div>
+
+                <div className="bg-white rounded-lg p-3 shadow-sm">
+                  <p className="text-gray-500 text-xs mb-1">🚰 Drain Blocked</p>
+                  <p className={`font-bold ${result.drain_blocked ? "text-red-600" : "text-green-600"}`}>
+                    {result.drain_blocked ? "YES ⚠️" : "No ✓"}
+                  </p>
+                </div>
+
+                {result.weather_metadata?.city && (
+                  <div className="bg-white rounded-lg p-3 shadow-sm col-span-2">
+                    <p className="text-gray-500 text-xs mb-1">📍 Location</p>
+                    <p className="font-semibold text-gray-800">
+                      {result.weather_metadata.city}, {result.weather_metadata.country}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })()}
 
       </div>
     </div>

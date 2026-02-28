@@ -48,6 +48,7 @@ export default function AdminDashboard() {
   const [selectedTickets, setSelectedTickets] = useState<string[]>([]);
   const [filteredTickets, setFilteredTickets] = useState<TicketWithProfile[]>([]);
   const [statusFilter, setStatusFilter] = useState<TicketStatus | 'ALL'>('ALL');
+  const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
   const [dateFilter, setDateFilter] = useState('');
   const [isCreateJobOpen, setIsCreateJobOpen] = useState(false);
   const [newJobTitle, setNewJobTitle] = useState('');
@@ -100,12 +101,16 @@ export default function AdminDashboard() {
     };
   }, []);
 
-  // Filter tickets based on status and date
+  // Filter tickets based on status, priority and date
   useEffect(() => {
     let filtered = tickets;
     
     if (statusFilter !== 'ALL') {
       filtered = filtered.filter(ticket => ticket.status === statusFilter);
+    }
+
+    if (priorityFilter !== 'ALL') {
+      filtered = filtered.filter(ticket => (ticket as any).priority === priorityFilter);
     }
     
     if (dateFilter) {
@@ -117,7 +122,7 @@ export default function AdminDashboard() {
     }
     
     setFilteredTickets(filtered);
-  }, [tickets, statusFilter, dateFilter]);
+  }, [tickets, statusFilter, priorityFilter, dateFilter]);
 
   const loadData = async () => {
     try {
@@ -381,6 +386,16 @@ export default function AdminDashboard() {
     }
   };
 
+  const getPriorityStyle = (priority: string) => {
+    switch (priority) {
+      case 'CRITICAL': return { badge: 'bg-red-600 text-white',    icon: '🚨', label: 'CRITICAL' };
+      case 'HIGH':     return { badge: 'bg-orange-500 text-white', icon: '🔴', label: 'HIGH' };
+      case 'MEDIUM':   return { badge: 'bg-yellow-500 text-white', icon: '🟡', label: 'MEDIUM' };
+      case 'LOW':      return { badge: 'bg-blue-500 text-white',   icon: '🔵', label: 'LOW' };
+      default:         return { badge: 'bg-green-600 text-white',  icon: '🟢', label: 'NORMAL' };
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -398,6 +413,10 @@ export default function AdminDashboard() {
     open: tickets.filter(t => t.status === 'OPEN').length,
     inProgress: tickets.filter(t => t.status === 'IN_PROGRESS').length,
     completed: tickets.filter(t => t.status === 'COMPLETED').length,
+    critical: tickets.filter(t => (t as any).priority === 'CRITICAL').length,
+    high: tickets.filter(t => (t as any).priority === 'HIGH').length,
+    medium: tickets.filter(t => (t as any).priority === 'MEDIUM').length,
+    drainBlocked: tickets.filter(t => (t as any).drain_blocked === true).length,
   };
 
   return (
@@ -423,10 +442,10 @@ export default function AdminDashboard() {
 
       {/* Stats Row */}
       <div className="p-4 bg-white border-b border-gray-200">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-9 gap-4">
           <div className="text-center">
             <div className="text-2xl font-bold text-blue-600">{stats.total}</div>
-            <div className="text-sm text-gray-600">Total Tickets</div>
+            <div className="text-sm text-gray-600">Total</div>
           </div>
           <div className="text-center">
             <div className="text-2xl font-bold text-red-600">{stats.new}</div>
@@ -444,17 +463,31 @@ export default function AdminDashboard() {
             <div className="text-2xl font-bold text-green-600">{stats.completed}</div>
             <div className="text-sm text-gray-600">Completed</div>
           </div>
+          {/* Divider */}
+          <div className="hidden md:block border-l border-gray-200" />
+          <div className="text-center">
+            <div className="text-2xl font-bold text-red-700">{stats.critical}</div>
+            <div className="text-sm text-gray-600">🚨 Critical</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-orange-500">{stats.high}</div>
+            <div className="text-sm text-gray-600">🔴 High</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-red-500">{stats.drainBlocked}</div>
+            <div className="text-sm text-gray-600">🚰 Drain Blocked</div>
+          </div>
         </div>
       </div>
 
       {/* Main Dashboard Layout */}
-      <div className="p-4 h-[calc(100vh-200px)]">
-        <div className="grid grid-cols-12 gap-4 h-full">
+      <div className="p-4">
+        <div className="grid grid-cols-12 gap-4">
           
           {/* Left Panel - Filters and Selected Tickets */}
           <div className="col-span-12 lg:col-span-3 space-y-4">
             {/* Filters */}
-            <Card>
+            <Card className="h-fit bg-white">
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
                   <Filter className="h-5 w-5" />
@@ -478,6 +511,22 @@ export default function AdminDashboard() {
                   </Select>
                 </div>
                 <div>
+                  <label className="text-sm font-medium mb-2 block">Priority</label>
+                  <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">All Priorities</SelectItem>
+                      <SelectItem value="CRITICAL">🚨 Critical</SelectItem>
+                      <SelectItem value="HIGH">🔴 High</SelectItem>
+                      <SelectItem value="MEDIUM">🟡 Medium</SelectItem>
+                      <SelectItem value="LOW">🔵 Low</SelectItem>
+                      <SelectItem value="NORMAL">🟢 Normal</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
                   <label className="text-sm font-medium mb-2 block">Date From</label>
                   <Input
                     type="date"
@@ -489,7 +538,7 @@ export default function AdminDashboard() {
             </Card>
 
             {/* Selected Tickets */}
-            <Card className="flex-1">
+            <Card className="flex-1 bg-white">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-lg">Selected Tickets</CardTitle>
                 <Badge variant="outline">{selectedTickets.length}</Badge>
@@ -507,30 +556,36 @@ export default function AdminDashboard() {
                         if (!ticket) return null;
                         const StatusIcon = getStatusIcon(ticket.status);
                         const displayTitle = ticket.title || `Ticket ${ticket.id.slice(0, 8)}`;
+                        const priority = (ticket as any).priority ?? 'NORMAL';
+                        const ps = getPriorityStyle(priority);
+                        const drainBlocked = (ticket as any).drain_blocked;
+                        const rainProb = (ticket as any).rain_probability;
+                        const wasteType = (ticket as any).waste_type;
+                        const severity = (ticket as any).severity;
                         return (
-                          <div key={ticketId} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                            <div className="flex items-center space-x-2">
-                              <StatusIcon className="h-4 w-4" />
-                              <span className="text-sm font-medium">{displayTitle.slice(0, 20)}...</span>
+                          <div key={ticketId} className="p-2 bg-gray-50 rounded border">
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex items-center space-x-1">
+                                <StatusIcon className="h-3 w-3" />
+                                <span className="text-xs font-medium truncate max-w-[100px]">{displayTitle.slice(0, 18)}…</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${ps.badge}`}>
+                                  {ps.icon} {ps.label}
+                                </span>
+                                <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => handleTicketSelect(ticketId, false)} title="Deselect">×</Button>
+                                <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-red-500 hover:text-red-700" onClick={() => deleteTicket(ticketId)} title="Delete">
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
                             </div>
-                            <div className="flex items-center">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleTicketSelect(ticketId, false)}
-                                title="Deselect"
-                              >
-                                ×
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                                onClick={() => deleteTicket(ticketId)}
-                                title="Delete from database"
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
+                            <div className="grid grid-cols-2 gap-1 text-[10px] text-gray-600">
+                              {wasteType && <span>🗑 {wasteType}</span>}
+                              {severity  && <span>📊 {severity}</span>}
+                              {rainProb  != null && <span>🌧 {Number(rainProb).toFixed(1)}%</span>}
+                              <span className={drainBlocked ? 'text-red-600 font-semibold' : 'text-green-600'}>
+                                🚰 {drainBlocked ? 'Drain blocked ⚠️' : 'Drain clear ✓'}
+                              </span>
                             </div>
                           </div>
                         );
@@ -579,7 +634,7 @@ export default function AdminDashboard() {
 
           {/* Center Panel - Map */}
           <div className="col-span-12 lg:col-span-6">
-            <Card className="h-full">
+            <Card className="h-[520px] bg-white">
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
                   <MapPin className="h-5 w-5" />
@@ -599,7 +654,7 @@ export default function AdminDashboard() {
 
           {/* Right Panel - Active Jobs */}
           <div className="col-span-12 lg:col-span-3">
-            <Card className="h-full">
+            <Card className="h-[520px] bg-white">
               <CardHeader>
                 <CardTitle className="flex items-center space-x-2">
                   <Users className="h-5 w-5" />
@@ -643,7 +698,99 @@ export default function AdminDashboard() {
             </Card>
           </div>
 
-        </div>
+        </div>{/* end grid */}
+
+        {/* FULL TICKET LIST */}
+        <Card className="mt-4 bg-white">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+            <CardTitle className="flex items-center gap-2">
+              <span>All Tickets</span>
+              <Badge variant="outline">{filteredTickets.length}</Badge>
+              {priorityFilter !== 'ALL' && <Badge className="text-xs">Priority: {priorityFilter}</Badge>}
+              {statusFilter !== 'ALL' && <Badge variant="secondary" className="text-xs">Status: {statusFilter}</Badge>}
+            </CardTitle>
+            <span className="text-xs text-gray-500">Click a row to select • sorted newest first</span>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-gray-50 text-xs text-gray-600 uppercase tracking-wide">
+                    <th className="px-4 py-3 text-left w-8">#</th>
+                    <th className="px-4 py-3 text-left">Priority</th>
+                    <th className="px-4 py-3 text-left">Ticket ID</th>
+                    <th className="px-4 py-3 text-left">Description</th>
+                    <th className="px-4 py-3 text-left">Waste Type</th>
+                    <th className="px-4 py-3 text-left">Severity</th>
+                    <th className="px-4 py-3 text-center">🚰 Drain</th>
+                    <th className="px-4 py-3 text-center">🌧 Rain %</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-left">Date</th>
+                    <th className="px-4 py-3 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredTickets.length === 0 ? (
+                    <tr><td colSpan={11} className="text-center py-12 text-gray-400 text-sm">No tickets match current filters</td></tr>
+                  ) : (
+                    filteredTickets.map((ticket, idx) => {
+                      const priority = (ticket as any).priority ?? 'NORMAL';
+                      const ps = getPriorityStyle(priority);
+                      const drainBlocked = (ticket as any).drain_blocked;
+                      const rainProb = (ticket as any).rain_probability;
+                      const wasteType = (ticket as any).waste_type;
+                      const severity = (ticket as any).severity;
+                      const isSelected = selectedTickets.includes(ticket.id);
+                      return (
+                        <tr
+                          key={ticket.id}
+                          className={`transition-colors hover:bg-gray-50 cursor-pointer ${isSelected ? 'bg-blue-50 hover:bg-blue-100' : ''} ${priority === 'CRITICAL' ? 'border-l-4 border-l-red-600' : priority === 'HIGH' ? 'border-l-4 border-l-orange-500' : priority === 'MEDIUM' ? 'border-l-4 border-l-yellow-400' : ''}`}
+                          onClick={() => handleTicketSelect(ticket.id, !isSelected)}
+                        >
+                          <td className="px-4 py-3 text-gray-400 text-xs">{idx + 1}</td>
+                          <td className="px-4 py-3">
+                            <span className={`text-xs font-bold px-2 py-1 rounded-full ${ps.badge}`}>{ps.icon} {ps.label}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="font-mono text-xs text-gray-600">{ticket.id.slice(0, 10)}…</span>
+                            {(ticket.ticket_count ?? 1) > 1 && <span className="ml-1 text-[10px] bg-amber-100 text-amber-700 px-1 rounded">×{ticket.ticket_count}</span>}
+                          </td>
+                          <td className="px-4 py-3 max-w-[200px]"><p className="text-xs text-gray-700 truncate">{ticket.description || '—'}</p></td>
+                          <td className="px-4 py-3"><span className="capitalize text-xs">{wasteType ?? '—'}</span></td>
+                          <td className="px-4 py-3">
+                            <span className={`capitalize text-xs font-medium ${severity === 'high' ? 'text-red-600' : severity === 'medium' ? 'text-yellow-600' : 'text-green-600'}`}>{severity ?? '—'}</span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {drainBlocked ? <span className="text-red-600 font-bold text-xs">⚠️ YES</span> : <span className="text-green-600 text-xs">✓ No</span>}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`text-xs font-medium ${rainProb >= 60 ? 'text-red-600' : rainProb >= 35 ? 'text-yellow-600' : 'text-blue-600'}`}>
+                              {rainProb != null ? `${Number(rainProb).toFixed(1)}%` : '—'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge variant={getStatusBadgeVariant(ticket.status)} className="text-xs">{ticket.status.replace('_', ' ')}</Badge>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{format(new Date(ticket.created_at), 'MMM d, HH:mm')}</td>
+                          <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
+                            <div className="flex items-center justify-center gap-1">
+                              <Button variant={isSelected ? 'secondary' : 'outline'} size="sm" className="h-6 text-[10px] px-2" onClick={() => handleTicketSelect(ticket.id, !isSelected)}>
+                                {isSelected ? '✓ Sel' : 'Select'}
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => deleteTicket(ticket.id)}>
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
-import { LatLngBounds, DivIcon } from 'leaflet';
+import { LatLngBounds } from 'leaflet';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CheckCircle, Plus } from 'lucide-react';
@@ -29,6 +29,26 @@ const STATUS_BADGE: Record<TicketStatus, 'destructive' | 'default' | 'secondary'
   COMPLETED: 'outline',
 };
 
+// Priority coloring — used for map markers
+const PRIORITY_COLORS: Record<string, string> = {
+  CRITICAL: '#dc2626', // red-600
+  HIGH:     '#ea580c', // orange-600
+  MEDIUM:   '#ca8a04', // yellow-600
+  LOW:      '#2563eb', // blue-600
+  NORMAL:   '#16a34a', // green-600
+};
+const PRIORITY_ORDER = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'NORMAL'];
+const PRIORITY_ICON: Record<string, string> = {
+  CRITICAL: '🚨', HIGH: '🔴', MEDIUM: '🟡', LOW: '🔵', NORMAL: '🟢'
+};
+
+const getPriorityColor = (tickets: any[]) => {
+  for (const p of PRIORITY_ORDER) {
+    if (tickets.some(t => (t.priority ?? 'NORMAL') === p)) return PRIORITY_COLORS[p];
+  }
+  return PRIORITY_COLORS.NORMAL;
+};
+
 // Groups tickets that share the exact same lat/lng
 function groupByLocation(tickets: Ticket[]): Map<string, Ticket[]> {
   const map = new Map<string, Ticket[]>();
@@ -53,10 +73,11 @@ function ClusterMarker({
   const allSelected = tickets.every(t => selectedTickets.includes(t.id));
   const someSelected = tickets.some(t => selectedTickets.includes(t.id));
 
-  // Pick dominant color based on worst status
-  const priority: TicketStatus[] = ['NEW', 'OPEN', 'IN_PROGRESS', 'COMPLETED'];
-  const dominantStatus = priority.find(s => tickets.some(t => t.status === s)) || tickets[0].status;
-  const color = STATUS_COLORS[dominantStatus];
+  // Color by highest-severity priority — not by status
+  const color = getPriorityColor(tickets);
+
+  // Dynamic DivIcon — only safe to construct on client
+  const { DivIcon } = require('leaflet') as typeof import('leaflet');
 
   // For a single-row ticket the DB ticket_count may already be > 1
   const dbCount = count === 1 ? (tickets[0].ticket_count ?? 1) : count;
@@ -110,6 +131,24 @@ function ClusterMarker({
               <span className="font-semibold text-sm">{ticket.title || `Ticket ${ticket.id.slice(0, 8)}`}</span>
               <Badge variant={STATUS_BADGE[ticket.status]}>{ticket.status.replace('_', ' ')}</Badge>
             </div>
+            {/* Priority row */}
+            {(() => {
+              const p = (ticket as any).priority ?? 'NORMAL';
+              const rainProb = (ticket as any).rain_probability;
+              const drainBlocked = (ticket as any).drain_blocked;
+              const wasteType = (ticket as any).waste_type;
+              return (
+                <div className="flex flex-wrap gap-1 mb-1 text-[10px]">
+                  <span style={{ background: PRIORITY_COLORS[p] ?? PRIORITY_COLORS.NORMAL }}
+                    className="text-white font-bold px-1.5 py-0.5 rounded-full">
+                    {PRIORITY_ICON[p] ?? '🟢'} {p}
+                  </span>
+                  {wasteType && <span className="bg-gray-100 px-1.5 py-0.5 rounded-full text-gray-700">🗑 {wasteType}</span>}
+                  {rainProb != null && <span className="bg-blue-100 px-1.5 py-0.5 rounded-full text-blue-700">🌧 {Number(rainProb).toFixed(1)}%</span>}
+                  {drainBlocked && <span className="bg-red-100 px-1.5 py-0.5 rounded-full text-red-700 font-semibold">🚰 Drain blocked</span>}
+                </div>
+              );
+            })()}
             {(ticket.ticket_count ?? 1) > 1 && (
               <div className="text-xs font-medium text-amber-600 mb-1">
                 🔁 {ticket.ticket_count} reports at this location
@@ -117,7 +156,6 @@ function ClusterMarker({
             )}
             <p className="text-xs text-gray-600 mb-2">{ticket.description || 'No description'}</p>
             <div className="text-xs text-gray-500 space-y-0.5 mb-3">
-              <div>Category: {ticket.category || 'Uncategorized'}</div>
               <div>Created: {format(new Date(ticket.created_at), 'MMM d, yyyy HH:mm')}</div>
             </div>
             <Button size="sm" variant={isSelected ? 'destructive' : 'default'} className="w-full"
@@ -153,13 +191,26 @@ function ClusterMarker({
                     <span className="font-medium truncate max-w-32">
                       {ticket.title || `Ticket ${ticket.id.slice(0, 8)}`}
                     </span>
-                    <Badge variant={STATUS_BADGE[ticket.status]} className="text-[10px] px-1">
-                      {ticket.status.replace('_', ' ')}
-                    </Badge>
+                    <div className="flex items-center gap-1">
+                      {(() => {
+                        const p = (ticket as any).priority ?? 'NORMAL';
+                        return (
+                          <span style={{ background: PRIORITY_COLORS[p] ?? PRIORITY_COLORS.NORMAL }}
+                            className="text-white font-bold px-1 py-0.5 rounded-full text-[9px]">
+                            {PRIORITY_ICON[p] ?? '🟢'} {p}
+                          </span>
+                        );
+                      })()}
+                      <Badge variant={STATUS_BADGE[ticket.status]} className="text-[10px] px-1">
+                        {ticket.status.replace('_', ' ')}
+                      </Badge>
+                    </div>
                   </div>
-                  <div className="text-gray-500">{ticket.category || 'Uncategorized'}</div>
+                  {(ticket as any).drain_blocked && (
+                    <div className="text-red-600 text-[10px] font-semibold">🚰 Drain blocked</div>
+                  )}
                   {isSelected && (
-                    <div className="text-blue-600 font-medium mt-1 flex items-center gap-1">
+                    <div className="text-blue-600 font-medium mt-1 flex items-center gap-1 text-[10px]">
                       <CheckCircle className="h-3 w-3" /> Selected
                     </div>
                   )}
@@ -191,13 +242,18 @@ function MapBounds({ tickets }: { tickets: Ticket[] }) {
 
 export default function AdminMapView({ tickets, selectedTickets, onTicketSelect }: AdminMapViewProps) {
   const [mapKey, setMapKey] = useState(0);
+  const [mounted, setMounted] = useState(false);
   const defaultCenter: [number, number] = [20.5937, 78.9629];
 
   useEffect(() => {
-    setMapKey(prev => prev + 1);
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted) setMapKey(prev => prev + 1);
   }, [tickets.length]);
 
-  if (typeof window === 'undefined') {
+  if (!mounted) {
     return (
       <div className="w-full h-full flex items-center justify-center bg-gray-100">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -228,16 +284,16 @@ export default function AdminMapView({ tickets, selectedTickets, onTicketSelect 
 
       {/* Legend */}
       <div className="absolute top-4 right-4 bg-white rounded-lg shadow-lg p-3 z-[1000]">
-        <h4 className="font-medium mb-2 text-sm">Status Legend</h4>
+        <h4 className="font-medium mb-2 text-sm">🎨 Priority</h4>
         <div className="space-y-1 text-xs">
-          {(['NEW', 'OPEN', 'IN_PROGRESS', 'COMPLETED'] as TicketStatus[]).map(s => (
-            <div key={s} className="flex items-center space-x-2">
-              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: STATUS_COLORS[s] }}></div>
-              <span>{s.replace('_', ' ')}</span>
+          {PRIORITY_ORDER.map(p => (
+            <div key={p} className="flex items-center space-x-2">
+              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: PRIORITY_COLORS[p] }}></div>
+              <span>{PRIORITY_ICON[p]} {p}</span>
             </div>
           ))}
           <div className="flex items-center space-x-2 mt-1 pt-1 border-t">
-            <div className="w-5 h-5 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold text-[9px]">3</div>
+            <div className="w-5 h-5 rounded-full bg-gray-500 flex items-center justify-center text-white font-bold text-[9px]">3</div>
             <span>Cluster</span>
           </div>
         </div>
