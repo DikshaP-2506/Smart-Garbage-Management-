@@ -3,7 +3,7 @@ import multer from 'multer';
 import crypto from 'crypto';
 import supabase from '../config/supabaseClient.js';
 import { transcribeAudioBuffer } from '../services/speechService.js';
-import { analyzeImage } from '../services/visionService.js';
+import { analyzeImage, estimateWasteValue } from '../services/visionService.js';
 import { processText } from '../services/nlpService.js';
 import { getRainProbability } from '../services/weatherService.js';
 import { calculateRisk } from '../services/riskEngine.js';
@@ -106,6 +106,26 @@ router.post('/submit', upload.any(), async (req, res) => {
     }
 
     console.log(`✅ Vision gate PASSED — ${visionResult.waste_type}, severity: ${visionResult.severity}, drain_blocked: ${visionResult.drain_blocked}`);
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 💰  WASTE-TO-WEALTH ESTIMATOR
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    let wasteValueResult = null;
+    try {
+      console.log('💰 Running Waste-to-Wealth estimation...');
+      wasteValueResult = await estimateWasteValue(imageFile.buffer, imageFile.mimetype);
+      console.log('✅ Waste value result:', wasteValueResult);
+    } catch (wasteValueError) {
+      console.warn('⚠️ Waste Value estimation failed — continuing without data:', wasteValueError.message);
+      // Non-fatal: continue with zero value data
+      wasteValueResult = { 
+        recyclable_materials: [], 
+        estimated_weight_kg: 0, 
+        estimated_revenue_inr: 0, 
+        breakdown: [], 
+        confidence: 0 
+      };
+    }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // 🎤  AI GATE 2 — Deepgram: transcribe audio (if any)
@@ -250,7 +270,13 @@ router.post('/submit', upload.any(), async (req, res) => {
         // Module 4 — Environmental Risk Engine
         priority: priority,
         rain_probability: rainProbability ?? null,
-        weather_metadata: weatherMetadata
+        weather_metadata: weatherMetadata,
+        // Waste-to-Wealth Estimation
+        recyclable_materials: wasteValueResult?.recyclable_materials || [],
+        estimated_weight_kg: wasteValueResult?.estimated_weight_kg || 0,
+        estimated_revenue_inr: wasteValueResult?.estimated_revenue_inr || 0,
+        waste_value_breakdown: wasteValueResult?.breakdown || [],
+        waste_value_confidence: wasteValueResult?.confidence || 0
       };
 
       const { data: insertedTicket, error: ticketError } = await supabase
@@ -285,7 +311,12 @@ router.post('/submit', upload.any(), async (req, res) => {
         drain_blocked: visionResult?.drain_blocked ?? false,
         waste_type: visionResult?.waste_type || null,
         severity: visionResult?.severity || null,
-        weather_metadata: weatherMetadata
+        weather_metadata: weatherMetadata,
+        // Waste-to-Wealth Data
+        recyclable_materials: wasteValueResult?.recyclable_materials || [],
+        estimated_weight_kg: wasteValueResult?.estimated_weight_kg || 0,
+        estimated_revenue_inr: wasteValueResult?.estimated_revenue_inr || 0,
+        waste_value_breakdown: wasteValueResult?.breakdown || []
       },
       // Points and Rewards System
       points: {
@@ -696,5 +727,92 @@ function checkSocialMilestone(totalPoints) {
   const milestones = [3000, 5000, 10000];
   return milestones.includes(totalPoints);
 }
+
+// 💰 GET WASTE-TO-WEALTH ANALYTICS (Admin Dashboard)
+router.get('/waste-value-analytics', async (req, res) => {
+  try {
+    console.log('💰 Fetching waste-to-wealth analytics...');
+    
+    const { data: tickets, error } = await supabase
+      .from('tickets')
+      .select(`
+        id,
+        created_at,
+        status,
+        priority,
+        waste_type,
+        recyclable_materials,
+        estimated_weight_kg,
+        estimated_revenue_inr,
+        waste_value_breakdown,
+        waste_value_confidence,
+        latitude,
+        longitude,
+        description
+      `)
+      .not('estimated_revenue_inr', 'is', null)
+      .gte('estimated_revenue_inr', 0)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching waste value analytics:', error);
+      return res.status(500).json({ error: 'Failed to fetch analytics data' });
+    }
+
+    // Calculate summary statistics
+    const totalRevenuePotential = tickets.reduce((sum, ticket) => sum + (ticket.estimated_revenue_inr || 0), 0);
+    const totalWeightEstimated = tickets.reduce((sum, ticket) => sum + (ticket.estimated_weight_kg || 0), 0);
+    const ticketsWithValue = tickets.filter(t => (t.estimated_revenue_inr || 0) > 0).length;
+    
+    // Material breakdown
+    const materialStats = {};
+    tickets.forEach(ticket => {
+      if (ticket.recyclable_materials && Array.isArray(ticket.recyclable_materials)) {
+        ticket.recyclable_materials.forEach(material => {
+          materialStats[material] = (materialStats[material] || 0) + (ticket.estimated_revenue_inr || 0);
+        });
+      }
+    });
+
+    const analytics = {
+      summary: {
+        total_revenue_potential_inr: totalRevenuePotential,
+        total_estimated_weight_kg: totalWeightEstimated,
+        tickets_with_value: ticketsWithValue,
+        total_tickets: tickets.length,
+        avg_revenue_per_ticket: ticketsWithValue > 0 ? (totalRevenuePotential / ticketsWithValue) : 0
+      },
+      material_breakdown: materialStats,
+      recent_valuable_tickets: tickets
+        .filter(t => (t.estimated_revenue_inr || 0) > 0)
+        .slice(0, 10)
+        .map(ticket => ({
+          id: ticket.id,
+          created_at: ticket.created_at,
+          location: `${ticket.latitude}, ${ticket.longitude}`,
+          waste_type: ticket.waste_type,
+          materials: ticket.recyclable_materials,
+          weight_kg: ticket.estimated_weight_kg,
+          revenue_inr: ticket.estimated_revenue_inr,
+          breakdown: ticket.waste_value_breakdown,
+          confidence: ticket.waste_value_confidence,
+          status: ticket.status,
+          priority: ticket.priority
+        }))
+    };
+
+    res.json({
+      success: true,
+      analytics
+    });
+
+  } catch (error) {
+    console.error('Waste value analytics error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error',
+      message: error.message 
+    });
+  }
+});
 
 export default router;

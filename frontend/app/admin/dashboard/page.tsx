@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Fragment } from 'react';
 import dynamic from 'next/dynamic';
-import { Shield, Filter, MapPin, Users, Clock, CheckCircle, AlertTriangle, Plus, Play, Trash2, Sparkles, Loader2 } from 'lucide-react';
+import { Shield, Filter, MapPin, Users, Clock, CheckCircle, AlertTriangle, Plus, Play, Trash2, DollarSign, Recycle, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -43,9 +43,39 @@ interface JobWithTicketCount extends Job {
   ticket_count?: number;
 }
 
+interface WasteAnalytics {
+  summary: {
+    total_revenue_potential_inr: number;
+    total_estimated_weight_kg: number;
+    tickets_with_value: number;
+    total_tickets: number;
+    avg_revenue_per_ticket: number;
+  };
+  material_breakdown: Record<string, number>;
+  recent_valuable_tickets: Array<{
+    id: string;
+    created_at: string;
+    location: string;
+    waste_type: string;
+    materials: string[];
+    weight_kg: number;
+    revenue_inr: number;
+    breakdown: Array<{
+      material: string;
+      weight_kg: number;
+      rate_per_kg: number;
+      revenue: number;
+    }>;
+    confidence: number;
+    status: string;
+    priority: string;
+  }>;
+}
+
 export default function AdminDashboard() {
   const [tickets, setTickets] = useState<TicketWithProfile[]>([]);
   const [jobs, setJobs] = useState<JobWithTicketCount[]>([]);
+  const [wasteAnalytics, setWasteAnalytics] = useState<WasteAnalytics | null>(null);
   const [selectedTickets, setSelectedTickets] = useState<string[]>([]);
   const [filteredTickets, setFilteredTickets] = useState<TicketWithProfile[]>([]);
   const [statusFilter, setStatusFilter] = useState<TicketStatus | 'ALL'>('ALL');
@@ -131,7 +161,8 @@ export default function AdminDashboard() {
     try {
       await Promise.all([
         loadTickets(),
-        loadJobs()
+        loadJobs(),
+        loadWasteAnalytics()
       ]);
     } catch (error) {
       console.error('Error loading data:', error);
@@ -234,6 +265,35 @@ export default function AdminDashboard() {
         description: (error as Error)?.message || "Failed to load jobs from database",
         variant: "destructive",
       });
+    }
+  };
+
+  const loadWasteAnalytics = async () => {
+    try {
+      console.log('Loading waste analytics...');
+      const response = await fetch('/api/reports/waste-value-analytics');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.success && data.analytics) {
+        setWasteAnalytics(data.analytics);
+        console.log('Loaded waste analytics:', data.analytics);
+      } else {
+        console.warn('Invalid waste analytics response format');
+        setWasteAnalytics(null);
+      }
+    } catch (error) {
+      console.error('Error loading waste analytics:', error);
+      toast({
+        title: "Error loading waste analytics", 
+        description: (error as Error)?.message || "Failed to load waste value data",
+        variant: "destructive",
+      });
+      setWasteAnalytics(null);
     }
   };
 
@@ -491,6 +551,54 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      {/* Waste-to-Wealth Analytics Row */}
+      {wasteAnalytics && (
+        <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-b border-gray-200">
+          <div className="flex items-center space-x-2 mb-3">
+            <DollarSign className="h-5 w-5 text-green-600" />
+            <h3 className="text-lg font-semibold text-green-800">Waste-to-Wealth Analytics</h3>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="text-center bg-white p-3 rounded-lg shadow-sm">
+              <div className="text-2xl font-bold text-green-600">₹{wasteAnalytics.summary.total_revenue_potential_inr.toFixed(2)}</div>
+              <div className="text-sm text-gray-600 flex items-center justify-center">
+                <TrendingUp className="h-4 w-4 mr-1" />
+                Total Revenue Potential
+              </div>
+            </div>
+            <div className="text-center bg-white p-3 rounded-lg shadow-sm">
+              <div className="text-2xl font-bold text-blue-600">{wasteAnalytics.summary.total_estimated_weight_kg.toFixed(1)} kg</div>
+              <div className="text-sm text-gray-600 flex items-center justify-center">
+                <Recycle className="h-4 w-4 mr-1" />
+                Total Weight
+              </div>
+            </div>
+            <div className="text-center bg-white p-3 rounded-lg shadow-sm">
+              <div className="text-2xl font-bold text-yellow-600">{wasteAnalytics.summary.tickets_with_value}</div>
+              <div className="text-sm text-gray-600">Valuable Tickets</div>
+            </div>
+            <div className="text-center bg-white p-3 rounded-lg shadow-sm">
+              <div className="text-2xl font-bold text-purple-600">₹{wasteAnalytics.summary.avg_revenue_per_ticket.toFixed(2)}</div>
+              <div className="text-sm text-gray-600">Avg ₹/Ticket</div>
+            </div>
+            <div className="text-center bg-white p-3 rounded-lg shadow-sm">
+              <div className="text-sm font-semibold text-gray-700 mb-1">Top Materials</div>
+              <div className="text-xs text-gray-600 space-y-1">
+                {Object.entries(wasteAnalytics.material_breakdown)
+                  .sort(([,a], [,b]) => b - a)
+                  .slice(0, 3)
+                  .map(([material, revenue]) => (
+                    <div key={material} className="flex justify-between">
+                      <span className="truncate">{material}</span>
+                      <span>₹{revenue.toFixed(0)}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Dashboard Layout */}
       <div className="p-4">
         <div className="grid grid-cols-12 gap-4">
@@ -737,6 +845,8 @@ export default function AdminDashboard() {
                     <th className="px-4 py-3 text-left">Severity</th>
                     <th className="px-4 py-3 text-center">🚰 Drain</th>
                     <th className="px-4 py-3 text-center">🌧 Rain %</th>
+                    <th className="px-4 py-3 text-center">💰 Value ₹</th>
+                    <th className="px-4 py-3 text-center">♻️ Weight</th>
                     <th className="px-4 py-3 text-left">Status</th>
                     <th className="px-4 py-3 text-left">Date</th>
                     <th className="px-4 py-3 text-center">Actions</th>
@@ -744,7 +854,7 @@ export default function AdminDashboard() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {filteredTickets.length === 0 ? (
-                    <tr><td colSpan={11} className="text-center py-12 text-gray-400 text-sm">No tickets match current filters</td></tr>
+                    <tr><td colSpan={13} className="text-center py-12 text-gray-400 text-sm">No tickets match current filters</td></tr>
                   ) : (
                     filteredTickets.map((ticket, idx) => {
                       const priority = (ticket as any).priority ?? 'NORMAL';
@@ -753,6 +863,9 @@ export default function AdminDashboard() {
                       const rainProb = (ticket as any).rain_probability;
                       const wasteType = (ticket as any).waste_type;
                       const severity = (ticket as any).severity;
+                      const estimatedRevenue = (ticket as any).estimated_revenue_inr ?? 0;
+                      const estimatedWeight = (ticket as any).estimated_weight_kg ?? 0;
+                      const recyclableMaterials = (ticket as any).recyclable_materials ?? [];
                       const isSelected = selectedTickets.includes(ticket.id);
                         const vr = verifyResults[ticket.id];
                         return (
@@ -781,6 +894,24 @@ export default function AdminDashboard() {
                             <span className={`text-xs font-medium ${rainProb >= 60 ? 'text-red-600' : rainProb >= 35 ? 'text-yellow-600' : 'text-blue-600'}`}>
                               {rainProb != null ? `${Number(rainProb).toFixed(1)}%` : '—'}
                             </span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {estimatedRevenue > 0 ? (
+                              <span className="text-xs font-bold text-green-600" title={`Materials: ${recyclableMaterials.join(', ')}`}>
+                                ₹{estimatedRevenue.toFixed(2)}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-400">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {estimatedWeight > 0 ? (
+                              <span className="text-xs font-medium text-blue-600">
+                                {estimatedWeight.toFixed(1)}kg
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-400">—</span>
+                            )}
                           </td>
                           <td className="px-4 py-3">
                             <Badge
