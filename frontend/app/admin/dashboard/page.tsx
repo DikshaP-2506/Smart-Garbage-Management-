@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Fragment } from 'react';
 import dynamic from 'next/dynamic';
-import { Shield, Filter, MapPin, Users, Clock, CheckCircle, AlertTriangle, Plus, Play, Trash2, DollarSign, Recycle, TrendingUp } from 'lucide-react';
+import { Shield, Filter, MapPin, Users, Clock, CheckCircle, AlertTriangle, Plus, Play, Trash2, DollarSign, Recycle, TrendingUp, Sparkles, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -78,15 +78,15 @@ export default function AdminDashboard() {
   const [wasteAnalytics, setWasteAnalytics] = useState<WasteAnalytics | null>(null);
   const [selectedTickets, setSelectedTickets] = useState<string[]>([]);
   const [filteredTickets, setFilteredTickets] = useState<TicketWithProfile[]>([]);
-  const [statusFilter, setStatusFilter] = useState<TicketStatus | 'ALL'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<TicketStatus | 'ALL' | 'PENDING_VERIFICATION'>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
   const [dateFilter, setDateFilter] = useState('');
   const [isCreateJobOpen, setIsCreateJobOpen] = useState(false);
   const [newJobTitle, setNewJobTitle] = useState('');
   const [loading, setLoading] = useState(true);
   const [verifyingTicket, setVerifyingTicket] = useState<string | null>(null);
-  const [verifyResults, setVerifyResults] = useState<Record<string, { verdict: string; confidence_pct: number; reasoning: string; is_clean: boolean; landmarks_match: boolean; drain_clear: boolean }>>({});
-  
+  const [verifyResults, setVerifyResults] = useState<Record<string, { verdict: string; confidence_pct: number; reasoning: string; is_clean: boolean; landmarks_match: boolean; drain_clear: boolean }>>({}); 
+  const [approvingJob, setApprovingJob] = useState<string | null>(null);
   const { toast } = useToast();
 
   // Load initial data
@@ -271,10 +271,13 @@ export default function AdminDashboard() {
   const loadWasteAnalytics = async () => {
     try {
       console.log('Loading waste analytics...');
-      const response = await fetch('/api/reports/waste-value-analytics');
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const response = await fetch(`${backendUrl}/api/reports/waste-value-analytics`);
       
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        console.warn(`Waste analytics unavailable: HTTP ${response.status}`);
+        setWasteAnalytics(null);
+        return;
       }
       
       const data = await response.json();
@@ -287,12 +290,7 @@ export default function AdminDashboard() {
         setWasteAnalytics(null);
       }
     } catch (error) {
-      console.error('Error loading waste analytics:', error);
-      toast({
-        title: "Error loading waste analytics", 
-        description: (error as Error)?.message || "Failed to load waste value data",
-        variant: "destructive",
-      });
+      console.warn('Waste analytics could not be loaded:', (error as Error)?.message);
       setWasteAnalytics(null);
     }
   };
@@ -327,6 +325,35 @@ export default function AdminDashboard() {
     } else {
       toast({ title: 'Deleted', description: 'Job removed from database' });
       loadJobs();
+    }
+  };
+
+  const approveJob = async (jobId: string) => {
+    setApprovingJob(jobId);
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+      const r = await fetch(`${apiBase}/api/jobs/${jobId}/verify-and-approve`, { method: 'POST' });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Verification failed');
+      if (d.all_passed) {
+        toast({
+          title: '✅ All Tickets Verified — Job Completed!',
+          description: `AI verified ${d.ticket_results?.length} ticket(s). Job marked COMPLETED.`,
+        });
+      } else {
+        const failed = d.ticket_results?.filter((t: any) => t.verdict !== 'CLOSED').length || 0;
+        toast({
+          title: '❌ Verification Failed — Sent Back to Worker',
+          description: `${failed} ticket(s) failed AI review. Job returned to the worker for photo corrections.`,
+          variant: 'destructive',
+        });
+      }
+      loadJobs();
+      loadTickets();
+    } catch (e) {
+      toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
+    } finally {
+      setApprovingJob(null);
     }
   };
 
@@ -436,6 +463,7 @@ export default function AdminDashboard() {
         variant: d.verdict === 'CLOSED' ? 'default' : 'destructive',
       });
       loadTickets();
+      loadJobs();
     } catch (e) {
       toast({ title: 'Verification Error', description: (e as Error).message, variant: 'destructive' });
     } finally {
@@ -451,6 +479,7 @@ export default function AdminDashboard() {
       case 'COMPLETED': return 'outline';
       case 'CLOSED' as any: return 'outline';
       case 'REJECTED' as any: return 'destructive';
+      case 'PENDING_VERIFICATION' as any: return 'outline';
       default: return 'default';
     }
   };
@@ -469,6 +498,7 @@ export default function AdminDashboard() {
     switch (status) {
       case 'OPEN': return 'default';
       case 'IN_PROGRESS': return 'secondary';
+      case 'PENDING_VERIFICATION' as any: return 'outline';
       case 'COMPLETED': return 'outline';
       default: return 'default';
     }
@@ -500,7 +530,8 @@ export default function AdminDashboard() {
     new: tickets.filter(t => t.status === 'NEW').length,
     open: tickets.filter(t => t.status === 'OPEN').length,
     inProgress: tickets.filter(t => t.status === 'IN_PROGRESS').length,
-    completed: tickets.filter(t => t.status === 'COMPLETED').length,
+    pendingReview: tickets.filter(t => t.status === 'COMPLETED' || (t.status as string) === 'PENDING_VERIFICATION').length,
+    completed: tickets.filter(t => (t.status as string) === 'CLOSED').length,
     critical: tickets.filter(t => (t as any).priority === 'CRITICAL').length,
     high: tickets.filter(t => (t as any).priority === 'HIGH').length,
     medium: tickets.filter(t => (t as any).priority === 'MEDIUM').length,
@@ -531,8 +562,12 @@ export default function AdminDashboard() {
             <div className="text-sm text-gray-600">In Progress</div>
           </div>
           <div className="text-center">
+            <div className="text-2xl font-bold text-yellow-600">{stats.pendingReview}</div>
+            <div className="text-sm text-gray-600">⏳ Pending Review</div>
+          </div>
+          <div className="text-center">
             <div className="text-2xl font-bold text-green-600">{stats.completed}</div>
-            <div className="text-sm text-gray-600">Completed</div>
+            <div className="text-sm text-gray-600">✅ Closed</div>
           </div>
           {/* Divider */}
           <div className="hidden md:block border-l border-gray-200" />
@@ -616,7 +651,7 @@ export default function AdminDashboard() {
               <CardContent className="space-y-4">
                 <div>
                   <label className="text-sm font-medium mb-2 block">Status</label>
-                  <Select value={statusFilter} onValueChange={(value: TicketStatus | 'ALL') => setStatusFilter(value)}>
+                  <Select value={statusFilter} onValueChange={(value: TicketStatus | 'ALL' | 'PENDING_VERIFICATION') => setStatusFilter(value)}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -625,7 +660,8 @@ export default function AdminDashboard() {
                       <SelectItem value="NEW">New</SelectItem>
                       <SelectItem value="OPEN">Open</SelectItem>
                       <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
-                      <SelectItem value="COMPLETED">Completed</SelectItem>
+                      <SelectItem value="COMPLETED">⏳ Pending Review (legacy)</SelectItem>
+                      <SelectItem value="PENDING_VERIFICATION">⏳ Pending Review</SelectItem>
                       <SelectItem value="CLOSED">Closed ✅</SelectItem>
                       <SelectItem value="REJECTED">Rejected ⚠️</SelectItem>
                     </SelectContent>
@@ -789,14 +825,34 @@ export default function AdminDashboard() {
                     No active jobs in this ward
                   </p>
                 ) : (
-                  jobs.map(job => (
+                  jobs.map(job => {
+                    // "Pending review" = worker submitted (completed_at set) but not yet AI-verified
+                    const isPendingReview = job.job_status === 'IN_PROGRESS' && !!(job as any).completed_at;
+                    return (
                     <div key={job.id} className="border rounded-lg p-3 space-y-2">
                       <div className="flex items-center justify-between">
                         <h4 className="font-medium text-sm">{job.title || `Job #${job.id.slice(0, 6).toUpperCase()}`}</h4>
                         <div className="flex items-center gap-1">
-                          <Badge variant={getJobStatusBadgeVariant(job.job_status)}>
-                            {job.job_status.replace('_', ' ')}
+                          <Badge
+                            variant={getJobStatusBadgeVariant(job.job_status)}
+                            className={isPendingReview ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : ''}
+                          >
+                            {isPendingReview ? '⏳ Pending Review' : (job.job_status as string).replace(/_/g, ' ')}
                           </Badge>
+                          {isPendingReview && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 px-2 text-[10px] text-purple-700 border-purple-300 hover:bg-purple-50"
+                              onClick={() => approveJob(job.id)}
+                              disabled={approvingJob === job.id}
+                              title="AI Verify & Approve"
+                            >
+                              {approvingJob === job.id
+                                ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Verifying…</>
+                                : <><Sparkles className="h-3 w-3 mr-1" />AI Verify & Approve</>}
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -813,7 +869,8 @@ export default function AdminDashboard() {
                         <span>{format(new Date(job.created_at), 'MMM d, HH:mm')}</span>
                       </div>
                     </div>
-                  ))
+                    );
+                  })
                 )}
               </CardContent>
             </Card>
@@ -918,9 +975,13 @@ export default function AdminDashboard() {
                               variant={getStatusBadgeVariant(ticket.status)}
                               className={`text-xs w-fit ${
                                 (ticket.status as string) === 'CLOSED' ? 'bg-green-100 text-green-800 border-green-300' :
-                                (ticket.status as string) === 'REJECTED' ? 'bg-red-100 text-red-800 border-red-300' : ''
+                                (ticket.status as string) === 'REJECTED' ? 'bg-red-100 text-red-800 border-red-300' :
+                                (ticket.status as string) === 'PENDING_VERIFICATION' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
+                                (ticket.status as string) === 'COMPLETED' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : ''
                               }`}>
-                              {ticket.status.replace('_', ' ')}
+                              {(ticket.status as string) === 'PENDING_VERIFICATION' || (ticket.status as string) === 'COMPLETED'
+                                ? '⏳ Pending Review'
+                                : ticket.status.replace(/_/g, ' ')}
                             </Badge>
                           </td>
                           <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{format(new Date(ticket.created_at), 'MMM d, HH:mm')}</td>
@@ -929,7 +990,7 @@ export default function AdminDashboard() {
                               <Button variant={isSelected ? 'secondary' : 'outline'} size="sm" className="h-6 text-[10px] px-2" onClick={() => handleTicketSelect(ticket.id, !isSelected)}>
                                 {isSelected ? '✓ Sel' : 'Select'}
                               </Button>
-                              {(ticket.status as string) === 'COMPLETED' && (
+                              {(['PENDING_VERIFICATION', 'COMPLETED'] as string[]).includes(ticket.status as string) && (
                                 <Button
                                   size="sm"
                                   className="h-6 text-[10px] px-2 bg-purple-600 hover:bg-purple-700 text-white"

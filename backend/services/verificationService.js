@@ -1,9 +1,41 @@
 import Groq from 'groq-sdk';
+import sharp from 'sharp';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+/**
+ * Compress an image URL or base64 data URI to a small JPEG base64 string.
+ * Max 768px wide, 60% quality — well within Groq's 4MB limit.
+ */
+const compressImage = async (urlOrDataUri) => {
+  try {
+    let inputBuffer;
+
+    if (urlOrDataUri.startsWith('data:')) {
+      // Base64 data URI → strip header and decode
+      const base64 = urlOrDataUri.split(',')[1];
+      inputBuffer = Buffer.from(base64, 'base64');
+    } else {
+      // HTTP URL → fetch the image
+      const res = await fetch(urlOrDataUri);
+      if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
+      inputBuffer = Buffer.from(await res.arrayBuffer());
+    }
+
+    const compressed = await sharp(inputBuffer)
+      .resize({ width: 768, withoutEnlargement: true })
+      .jpeg({ quality: 60 })
+      .toBuffer();
+
+    return `data:image/jpeg;base64,${compressed.toString('base64')}`;
+  } catch (err) {
+    console.warn('⚠️ Image compression failed, using original:', err.message);
+    return urlOrDataUri; // fall back to original
+  }
+};
 
 /**
  * Module 7: AI Verification Auditor
@@ -16,6 +48,14 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 export const verifyCleanup = async (beforeUrl, afterUrl) => {
   try {
     console.log('🔍 Module 7: AI Verification Auditor starting...');
+
+    // Compress both images to stay under Groq's request size limit
+    console.log('🗜️  Compressing images...');
+    const [compressedBefore, compressedAfter] = await Promise.all([
+      compressImage(beforeUrl),
+      compressImage(afterUrl),
+    ]);
+    console.log(`   Before: ${Math.round(compressedBefore.length / 1024)}KB  After: ${Math.round(compressedAfter.length / 1024)}KB`);
 
     const prompt = `You are a STRICT AI Quality Control auditor for a smart city garbage management system.
 
@@ -58,9 +98,9 @@ Exact format:
           role: 'user',
           content: [
             { type: 'text', text: 'BEFORE image (garbage present):' },
-            { type: 'image_url', image_url: { url: beforeUrl } },
+            { type: 'image_url', image_url: { url: compressedBefore } },
             { type: 'text', text: 'AFTER image (post-cleanup):' },
-            { type: 'image_url', image_url: { url: afterUrl } },
+            { type: 'image_url', image_url: { url: compressedAfter } },
             { type: 'text', text: prompt },
           ],
         },

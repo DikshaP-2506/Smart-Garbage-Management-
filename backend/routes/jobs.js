@@ -237,9 +237,21 @@ router.post('/:jobId/upload-after', upload.single('image'), async (req, res) => 
       console.log('Storage upload failed, using base64 fallback');
     }
 
+    // Check current status — if REJECTED, reset to IN_PROGRESS so worker can re-submit
+    const { data: currentTicket } = await supabase
+      .from('tickets')
+      .select('status')
+      .eq('id', ticket_id)
+      .single();
+
+    const ticketUpdate = { after_image_path: imageUrl };
+    if (currentTicket?.status === 'REJECTED') {
+      ticketUpdate.status = 'IN_PROGRESS';
+    }
+
     const { error: updateError } = await supabase
       .from('tickets')
-      .update({ after_image_path: imageUrl })
+      .update(ticketUpdate)
       .eq('id', ticket_id);
 
     if (updateError) throw updateError;
@@ -253,7 +265,8 @@ router.post('/:jobId/upload-after', upload.single('image'), async (req, res) => 
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // POST /api/jobs/:jobId/complete
-// Worker marks a job as completed — updates job + all linked tickets
+// Worker marks a job as done — keeps job IN_PROGRESS (DB constraint),
+// sets tickets to PENDING_VERIFICATION so admin knows to review.
 // Body: { worker_id, notes? }
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 router.post('/:jobId/complete', async (req, res) => {
@@ -261,13 +274,140 @@ router.post('/:jobId/complete', async (req, res) => {
     const { jobId } = req.params;
     const { worker_id, notes } = req.body;
 
+    // Keep job_status as IN_PROGRESS (DB constraint only allows OPEN/IN_PROGRESS/COMPLETED).
+    // Use completed_at timestamp as the signal that worker has submitted for review.
     const { error: jobError } = await supabase
       .from('jobs')
       .update({
-        job_status: 'COMPLETED',
         completed_at: new Date().toISOString(),
         ...(notes ? { notes } : {}),
       })
+      .eq('id', jobId);
+
+    if (jobError) throw jobError;
+
+    const { data: links } = await supabase
+      .from('job_tickets')
+      .select('ticket_id')
+      .eq('job_id', jobId);
+
+    const ticketIds = (links || []).map((l) => l.ticket_id);
+
+    if (ticketIds.length > 0) {
+      await supabase.from('tickets').update({ status: 'PENDING_VERIFICATION' }).in('id', ticketIds);
+    }
+
+    res.json({
+      success: true,
+      message: 'Job submitted for admin verification 🔍',
+      completed_tickets: ticketIds.length,
+    });
+  } catch (err) {
+    console.error('POST /jobs/:jobId/complete error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// POST /api/jobs/:jobId/verify-and-approve
+// Admin triggers AI verification on all job tickets.
+// If all pass → COMPLETED. If any fail → job returns to IN_PROGRESS.
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://kzbskltgojbawtbzsynj.supabase.co';
+const resolveImageUrl = (path, bucket = 'reports') => {
+  if (!path) return null;
+  if (path.startsWith('http') || path.startsWith('data:')) return path;
+  return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+};
+
+router.post('/:jobId/verify-and-approve', async (req, res) => {
+  const { jobId } = req.params;
+  try {
+    // 1. Get all ticket IDs linked to this job
+    const { data: links } = await supabase
+      .from('job_tickets')
+      .select('ticket_id')
+      .eq('job_id', jobId);
+    const ticketIds = (links || []).map((l) => l.ticket_id);
+
+    if (ticketIds.length === 0) {
+      return res.status(400).json({ error: 'No tickets linked to this job' });
+    }
+
+    // 2. Fetch all tickets
+    const { data: tickets, error: ticketFetchError } = await supabase
+      .from('tickets')
+      .select('id, before_image_path, after_image_path')
+      .in('id', ticketIds);
+    if (ticketFetchError) throw ticketFetchError;
+
+    // 3. Dynamically import verifyCleanup to avoid circular deps
+    const { verifyCleanup } = await import('../services/verificationService.js');
+
+    let allPassed = true;
+    const results = [];
+
+    for (const ticket of tickets) {
+      if (!ticket.before_image_path || !ticket.after_image_path) {
+        // No images — skip AI, mark as needs-review
+        results.push({ id: ticket.id, verdict: 'SKIPPED', reason: 'Missing before/after images' });
+        continue;
+      }
+      const beforeUrl = resolveImageUrl(ticket.before_image_path, 'reports');
+      const afterUrl  = resolveImageUrl(ticket.after_image_path, 'report-images');
+      const result = await verifyCleanup(beforeUrl, afterUrl);
+      const verdict = result.verdict; // 'CLOSED' or 'REJECTED'
+
+      await supabase.from('tickets').update({
+        status: verdict,
+        verification_confidence: result.confidence,
+        verification_reasoning: result.reasoning,
+      }).eq('id', ticket.id);
+
+      results.push({ id: ticket.id, verdict, confidence_pct: Math.round(result.confidence * 100) });
+      if (verdict !== 'CLOSED') allPassed = false;
+    }
+
+    // 4. Set job status based on results
+    if (allPassed) {
+      // All passed — mark job COMPLETED
+      await supabase.from('jobs').update({ job_status: 'COMPLETED' }).eq('id', jobId);
+    } else {
+      // Some failed — send back to the SAME worker: clear completed_at so it reappears
+      // as their active job. Keep accepted_by intact so only they see it.
+      await supabase.from('jobs').update({
+        completed_at: null,
+      }).eq('id', jobId);
+      // Rejected tickets stay as REJECTED so the re-upload UI shows.
+      // CLOSED (passed) tickets stay as CLOSED.
+    }
+
+    return res.json({
+      success: true,
+      all_passed: allPassed,
+      job_status: allPassed ? 'COMPLETED' : 'IN_PROGRESS',
+      ticket_results: results,
+      message: allPassed
+        ? 'All tickets verified ✅ Job marked as COMPLETED'
+        : 'Some tickets failed AI verification ❌ Sent back to worker for photo corrections',
+    });
+  } catch (err) {
+    console.error('POST /jobs/:jobId/verify-and-approve error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// POST /api/jobs/:jobId/approve
+// Admin manually approves a PENDING_VERIFICATION job → marks COMPLETED
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+router.post('/:jobId/approve', async (req, res) => {
+  try {
+    const { jobId } = req.params;
+
+    const { error: jobError } = await supabase
+      .from('jobs')
+      .update({ job_status: 'COMPLETED' })
       .eq('id', jobId);
 
     if (jobError) throw jobError;
@@ -285,11 +425,11 @@ router.post('/:jobId/complete', async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Job completed! Great work 🎉',
-      completed_tickets: ticketIds.length,
+      message: 'Job approved and marked as completed ✅',
+      approved_tickets: ticketIds.length,
     });
   } catch (err) {
-    console.error('POST /jobs/:jobId/complete error:', err.message);
+    console.error('POST /jobs/:jobId/approve error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

@@ -31,7 +31,7 @@ interface TicketInJob {
 interface JobData {
   id: string;
   title: string | null;
-  job_status: 'OPEN' | 'IN_PROGRESS' | 'COMPLETED';
+  job_status: 'OPEN' | 'IN_PROGRESS' | 'PENDING_VERIFICATION' | 'COMPLETED';
   assigned_by: string | null;
   assigned_ward: number | null;
   accepted_by: string | null;
@@ -230,7 +230,7 @@ export default function WorkerDashboard() {
       let d: any = {};
       try { d = JSON.parse(text3); } catch { throw new Error(`Server error (${r.status}): backend may not be running`); }
       if (!r.ok) throw new Error(d.error || 'Failed to complete job');
-      toast({ title: '🎉 Job Completed!', description: `${d.completed_tickets} ticket(s) marked done.` });
+      toast({ title: '✅ Submitted for Verification', description: `${d.completed_tickets} ticket(s) sent to admin for approval.` });
       await loadAll();
     } catch (e) {
       toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
@@ -238,10 +238,14 @@ export default function WorkerDashboard() {
   };
 
   // ── Derived ───────────────────────────────────────────────────────────────────
-  const activeJob       = myJobs.find((j) => j.job_status === 'IN_PROGRESS');
-  const completedJobs   = myJobs.filter((j) => j.job_status === 'COMPLETED');
-  // Must have at least 1 ticket AND all tickets must have after images
-  const allAfterDone    = (job: JobData) => job.tickets.length > 0 && job.tickets.every((t) => !!t.after_image_path);
+  // Pending review = IN_PROGRESS with completed_at set (worker submitted, awaiting admin AI verify)
+  const isPendingReview = (j: JobData) => j.job_status === 'IN_PROGRESS' && !!j.completed_at;
+  const activeJob     = myJobs.find((j) => j.job_status === 'IN_PROGRESS' && !j.completed_at);
+  const completedJobs = myJobs.filter((j) => j.job_status === 'COMPLETED' || isPendingReview(j));
+  // Must have at least 1 ticket, all tickets have after images, and none are still REJECTED
+  const allAfterDone    = (job: JobData) =>
+    job.tickets.length > 0 &&
+    job.tickets.every((t) => !!t.after_image_path && t.status !== 'REJECTED');
   const openInMaps      = (lat?: number | null, lon?: number | null) => {
     if (lat && lon) window.open(`https://maps.google.com/?q=${lat},${lon}`, '_blank');
   };
@@ -307,9 +311,38 @@ export default function WorkerDashboard() {
         </>
       )}
       {forActive && ticket.after_image_path && (
-        <p className="text-xs text-green-600 font-medium flex items-center gap-1">
-          <CheckCircle className="h-3.5 w-3.5" /> After photo saved
-        </p>
+        <>
+          <input type="file" accept="image/*" capture="environment" className="hidden"
+            ref={(el) => { fileInputRefs.current[`re_${ticket.id}`] = el; }}
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadAfterImage(jobId, ticket.id, f); e.target.value = ''; }} />
+          {ticket.status === 'REJECTED' ? (
+            <div className="space-y-1">
+              <p className="text-xs text-red-600 font-medium flex items-center gap-1">
+                <AlertTriangle className="h-3.5 w-3.5" /> AI rejected this photo — please re-upload
+              </p>
+              <Button size="sm" variant="outline" className="h-7 text-xs border-red-400 text-red-600 hover:bg-red-50 w-full"
+                disabled={uploadingTicket === ticket.id}
+                onClick={() => fileInputRefs.current[`re_${ticket.id}`]?.click()}>
+                {uploadingTicket === ticket.id
+                  ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />Uploading…</>
+                  : <><Upload className="h-3 w-3 mr-1" />Re-upload After Photo</>}
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-green-600 font-medium flex items-center gap-1">
+                <CheckCircle className="h-3.5 w-3.5" /> After photo saved
+              </p>
+              <Button size="sm" variant="ghost" className="h-6 text-[10px] text-gray-500 hover:text-gray-700 px-2"
+                disabled={uploadingTicket === ticket.id}
+                onClick={() => fileInputRefs.current[`re_${ticket.id}`]?.click()}>
+                {uploadingTicket === ticket.id
+                  ? <><Loader2 className="h-3 w-3 mr-1 animate-spin" />…</>
+                  : <>↺ Replace</>}
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -336,13 +369,26 @@ export default function WorkerDashboard() {
                     {job.distance_km < 1 ? `${(job.distance_km * 1000).toFixed(0)}m` : `${job.distance_km.toFixed(1)}km`} away
                   </span>
                 )}
+                {mode === 'history' && job.job_status === 'PENDING_VERIFICATION' && (
+                  <span className="text-[10px] font-bold bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full">⏳ Awaiting Admin Approval</span>
+                )}
+                {mode === 'history' && isPendingReview(job) && (
+                  <span className="text-[10px] font-bold bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full">⏳ Awaiting Admin Review</span>
+                )}
+                {mode === 'history' && job.job_status === 'COMPLETED' && (
+                  <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded-full">✅ Verified & Completed</span>
+                )}
               </div>
               <h3 className="font-semibold text-gray-900 text-sm">{job.title || 'Untitled Job'}</h3>
               <p className="text-xs text-gray-500 mt-0.5">
                 {mode === 'active' && job.accepted_at
                   ? `Accepted ${formatDistanceToNow(new Date(job.accepted_at))} ago`
                   : mode === 'history' && job.completed_at
-                  ? `Completed ${format(new Date(job.completed_at), 'MMM d, HH:mm')}`
+                  ? isPendingReview(job)
+                    ? `Submitted ${format(new Date(job.completed_at), 'MMM d, HH:mm')} — awaiting admin review`
+                    : job.job_status === 'PENDING_VERIFICATION'
+                    ? `Submitted ${format(new Date(job.completed_at), 'MMM d, HH:mm')} — awaiting admin approval`
+                    : `Completed ${format(new Date(job.completed_at), 'MMM d, HH:mm')}`
                   : `Broadcast ${formatDistanceToNow(new Date(job.created_at))} ago`}
               </p>
             </div>
@@ -443,13 +489,13 @@ export default function WorkerDashboard() {
               </div>
 
               {/* ── STEP 4: Complete ── */}
-              <div className={`rounded-lg border p-3 ${allAfterDone(job) ? 'border-green-300 bg-green-50' : 'border-gray-200 bg-gray-50'}`}>
+              <div className={`rounded-lg border p-3 ${allAfterDone(job) ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}>
                 <div className="flex items-center gap-2 mb-2">
                   <span className={`text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center shrink-0 ${
-                    allAfterDone(job) ? 'bg-green-600 text-white' : 'bg-gray-400 text-white'
+                    allAfterDone(job) ? 'bg-blue-600 text-white' : 'bg-gray-400 text-white'
                   }`}>4</span>
-                  <p className={`text-xs font-bold uppercase tracking-wide ${allAfterDone(job) ? 'text-green-700' : 'text-gray-500'}`}>
-                    Mark Complete
+                  <p className={`text-xs font-bold uppercase tracking-wide ${allAfterDone(job) ? 'text-blue-700' : 'text-gray-500'}`}>
+                    Send for Review
                   </p>
                   {!allAfterDone(job) && job.tickets.length > 0 && (
                     <span className="text-[10px] text-gray-400 italic">— upload all photos first</span>
@@ -463,17 +509,19 @@ export default function WorkerDashboard() {
                   <Button size="sm"
                     className={`w-full text-white font-semibold ${
                       allAfterDone(job)
-                        ? 'bg-green-600 hover:bg-green-700'
+                        ? 'bg-blue-600 hover:bg-blue-700'
                         : 'bg-gray-300 cursor-not-allowed'
                     }`}
                     disabled={completingJob === job.id || !allAfterDone(job)}
                     onClick={() => completeJob(job.id)}>
                     {completingJob === job.id
-                      ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Completing…</>
+                      ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Sending for Review…</>
                       : job.tickets.length === 0
                       ? <><AlertTriangle className="h-4 w-4 mr-2" />No tickets linked</>
+                      : job.tickets.some(t => t.status === 'REJECTED')
+                      ? <><AlertTriangle className="h-4 w-4 mr-2" />{job.tickets.filter(t => t.status === 'REJECTED').length} rejected photo(s) — re-upload first</>
                       : allAfterDone(job)
-                      ? <><CheckCircle className="h-4 w-4 mr-2" />Mark Job Complete</>
+                      ? <><Upload className="h-4 w-4 mr-2" />Send for Admin Review</>
                       : <><Upload className="h-4 w-4 mr-2" />{job.tickets.filter(t => !t.after_image_path).length} photo(s) still pending</>}
                   </Button>
                 </div>
@@ -579,7 +627,7 @@ export default function WorkerDashboard() {
           {([
             { key: 'available', label: `Available (${availableJobs.length})`, icon: <Wifi className="h-3.5 w-3.5" /> },
             { key: 'active',    label: 'My Job',                              icon: <Clock className="h-3.5 w-3.5" /> },
-            { key: 'history',   label: `Done (${completedJobs.length})`,      icon: <CheckCircle className="h-3.5 w-3.5" /> },
+            { key: 'history',   label: `History (${completedJobs.length})`,   icon: <CheckCircle className="h-3.5 w-3.5" /> },
           ] as const).map(({ key, label, icon }) => (
             <button key={key}
               className={`flex-1 flex items-center justify-center gap-1 text-xs font-medium py-1.5 rounded-md transition-all

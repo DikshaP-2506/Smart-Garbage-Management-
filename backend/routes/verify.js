@@ -33,9 +33,9 @@ router.post('/:ticketId', async (req, res) => {
       return res.status(404).json({ error: 'Ticket not found' });
     }
 
-    if (ticket.status !== 'COMPLETED') {
+    if (ticket.status !== 'COMPLETED' && ticket.status !== 'PENDING_VERIFICATION' && ticket.status !== 'REJECTED') {
       return res.status(400).json({
-        error: `Ticket must be COMPLETED before verification (current: ${ticket.status})`,
+        error: `Ticket must be PENDING_VERIFICATION, COMPLETED, or REJECTED before verification (current: ${ticket.status})`,
       });
     }
 
@@ -87,6 +87,22 @@ router.post('/:ticketId', async (req, res) => {
         .update({ status: result.verdict })
         .eq('id', ticketId);
       if (minimalError) throw minimalError;
+    }
+
+    // 5. If rejected, clear completed_at on the parent job so worker sees it as active again
+    if (result.verdict === 'REJECTED') {
+      const { data: link } = await supabase
+        .from('job_tickets')
+        .select('job_id')
+        .eq('ticket_id', ticketId)
+        .single();
+      if (link?.job_id) {
+        await supabase
+          .from('jobs')
+          .update({ completed_at: null })
+          .eq('id', link.job_id);
+        console.log(`↩️  Cleared completed_at on job ${link.job_id} — returned to worker as active`);
+      }
     }
 
     return res.json({
