@@ -84,11 +84,6 @@ export default function GetStartedPage() {
 
             {/* Worker Role */}
             <Card className="border-0 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-2 cursor-pointer group relative">
-              <div className="absolute top-4 right-4">
-                <Badge className="bg-orange-100 text-orange-800 border-0">
-                  Coming Soon
-                </Badge>
-              </div>
               <CardHeader className="text-center pb-4">
                 <div className="w-20 h-20 bg-gradient-to-r from-orange-100 to-yellow-100 rounded-full flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
                   <Wrench className="h-10 w-10 text-orange-600" />
@@ -122,12 +117,11 @@ export default function GetStartedPage() {
                   </div>
                 </div>
                 
-                <Button 
-                  className="w-full mt-6 bg-gray-300 text-gray-500 cursor-not-allowed" 
-                  disabled
-                >
-                  Worker Portal (Coming Soon)
-                </Button>
+                <Link href="/worker/dashboard" className="block">
+                  <Button className="w-full mt-6 bg-gradient-to-r from-orange-500 to-yellow-500 text-white hover:shadow-lg transition-all duration-300">
+                    Enter Worker Portal
+                  </Button>
+                </Link>
               </CardContent>
             </Card>
 

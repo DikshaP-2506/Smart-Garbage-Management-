@@ -9,6 +9,7 @@ import {
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
+import DashboardLayout from '@/components/dashboard-layout';
 import { supabase } from '@/lib/supabase';
 import { format, formatDistanceToNow } from 'date-fns';
 
@@ -508,7 +509,7 @@ export default function WorkerDashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <DashboardLayout userType="worker" userName={workerName}>
 
       {/* ── Lightbox ── */}
       {lightboxUrl && (
@@ -526,36 +527,6 @@ export default function WorkerDashboard() {
           />
         </div>
       )}
-
-      {/* ── Header ── */}
-      <div className="bg-blue-900 text-white px-4 py-3 flex items-center justify-between shadow-md">
-        <div className="flex items-center gap-3">
-          <div className="bg-blue-700 p-2 rounded-full">
-            <Briefcase className="h-5 w-5" />
-          </div>
-          <div>
-            <h1 className="font-bold text-base leading-tight">Worker Portal</h1>
-            <p className="text-blue-200 text-xs">{workerName}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {geoAllowed === true ? (
-            <span className="flex items-center gap-1 text-xs text-green-300">
-              <Navigation className="h-3 w-3" /> GPS On
-            </span>
-          ) : geoAllowed === false ? (
-            <button className="flex items-center gap-1 text-xs text-yellow-300 underline" onClick={requestLocation}>
-              <WifiOff className="h-3 w-3" /> Enable GPS
-            </button>
-          ) : (
-            <span className="text-xs text-blue-300 animate-pulse">Getting GPS…</span>
-          )}
-          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-white hover:bg-blue-800"
-            onClick={() => loadAll(true)} disabled={refreshing}>
-            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
-          </Button>
-        </div>
-      </div>
 
       {/* ── Stats Bar ── */}
       <div className="bg-white border-b border-gray-200 px-4 py-2">
@@ -708,6 +679,6 @@ export default function WorkerDashboard() {
           </div>
         )}
       </div>
-    </div>
+    </DashboardLayout>
   );
 }
